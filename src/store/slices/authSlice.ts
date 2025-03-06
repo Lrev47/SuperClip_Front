@@ -42,37 +42,141 @@ interface JwtPayload {
 
 // Helper functions for token storage
 const setToken = async (token: string | null | undefined): Promise<void> => {
-  console.log('🔑 Setting auth token:', token ? 'Has value' : 'Null/undefined');
+  console.log('🔑 Setting auth token:', token ? token.substring(0, 15) + '...' : 'Null/undefined');
   if (!token) {
+    console.log('🔑 Token is null/undefined, clearing token');
     await clearToken();
     return;
   }
   
-  if (isElectron()) {
-    await window.electron.setAuthToken(token);
-  } else {
-    localStorage.setItem('auth_token', token);
+  try {
+    if (isElectron()) {
+      console.log('🔑 Setting token in Electron storage');
+      
+      // Additional debug logging
+      console.log('🔧 isElectron() reported:', true);
+      console.log('🔧 window.electron exists:', Boolean(window.electron));
+      console.log('🔧 window.electron methods:', Object.keys(window.electron).join(', '));
+      
+      // Check if the setAuthToken method is available
+      if (typeof window.electron.setAuthToken !== 'function') {
+        console.error('❌ window.electron.setAuthToken is not a function!');
+        // Fallback to localStorage
+        console.log('🔧 Falling back to localStorage');
+        localStorage.setItem('auth_token', token);
+        return;
+      }
+      
+      try {
+        const result = await window.electron.setAuthToken(token);
+        console.log('🔑 Electron setAuthToken result:', result);
+      } catch (electronError) {
+        console.error('❌ Error in window.electron.setAuthToken:', electronError);
+        // Fallback to localStorage
+        localStorage.setItem('auth_token', token);
+      }
+    } else {
+      console.log('🔑 Setting token in localStorage');
+      localStorage.setItem('auth_token', token);
+    }
+    
+    // Verify token was saved
+    const savedToken = await getToken();
+    if (savedToken) {
+      console.log('✅ Token verification after save:', savedToken.substring(0, 15) + '...');
+    } else {
+      console.error('❌ Failed to save token - verification returned null/undefined');
+      // Try saving to localStorage as a backup
+      if (isElectron()) {
+        console.log('🔧 Saving to localStorage as backup');
+        localStorage.setItem('auth_token', token);
+      }
+    }
+  } catch (error) {
+    console.error('❌ Error setting token:', error);
+    // Last resort fallback
+    try {
+      localStorage.setItem('auth_token', token);
+      console.log('🔧 Saved to localStorage as last resort');
+    } catch (localStorageError) {
+      console.error('❌ Failed to save to localStorage:', localStorageError);
+    }
   }
 };
 
 const getToken = async (): Promise<string | null> => {
-  if (isElectron()) {
-    const token = await window.electron.getAuthToken();
-    console.log('🔑 Got token from Electron:', token ? 'Token found' : 'No token');
+  try {
+    let token = null;
+    
+    if (isElectron()) {
+      console.log('🔑 Getting token from Electron');
+      try {
+        token = await window.electron.getAuthToken();
+        console.log('🔑 Got token from Electron:', token ? token.substring(0, 15) + '...' : 'No token');
+      } catch (electronError) {
+        console.error('❌ Error getting token from Electron:', electronError);
+      }
+      
+      // Fallback to localStorage if no token in Electron store
+      if (!token) {
+        const localToken = localStorage.getItem('auth_token');
+        if (localToken) {
+          console.log('🔑 Fallback: Got token from localStorage:', localToken.substring(0, 15) + '...');
+          
+          // Save it back to electron store for next time
+          try {
+            console.log('🔄 Migrating token from localStorage to Electron store');
+            await window.electron.setAuthToken(localToken);
+            token = localToken;
+          } catch (migrationError) {
+            console.error('❌ Failed to migrate token to Electron store:', migrationError);
+            // But still use the localStorage token
+            token = localToken;
+          }
+        }
+      }
+    } else {
+      console.log('🔑 Getting token from localStorage');
+      token = localStorage.getItem('auth_token');
+      console.log('🔑 Got token from localStorage:', token ? token.substring(0, 15) + '...' : 'No token');
+    }
+    
     return token;
-  } else {
-    const token = localStorage.getItem('auth_token');
-    console.log('🔑 Got token from localStorage:', token ? 'Token found' : 'No token');
-    return token;
+  } catch (error) {
+    console.error('❌ Error getting token:', error);
+    
+    // Last resort: try localStorage directly
+    try {
+      const localToken = localStorage.getItem('auth_token');
+      console.log('🔧 Last resort: Checking localStorage:', localToken ? 'Found token' : 'No token');
+      return localToken;
+    } catch (localStorageError) {
+      console.error('❌ Failed to access localStorage:', localStorageError);
+      return null;
+    }
   }
 };
 
 const clearToken = async (): Promise<void> => {
-  console.log('🔑 Clearing auth token');
-  if (isElectron()) {
-    await window.electron.clearAuthToken();
-  } else {
-    localStorage.removeItem('auth_token');
+  try {
+    console.log('🔑 Clearing auth token');
+    if (isElectron()) {
+      console.log('🔑 Clearing token from Electron');
+      await window.electron.clearAuthToken();
+    } else {
+      console.log('🔑 Clearing token from localStorage');
+      localStorage.removeItem('auth_token');
+    }
+    
+    // Verify token was cleared
+    const token = await getToken();
+    if (token) {
+      console.warn('⚠️ Token not cleared properly:', token.substring(0, 15) + '...');
+    } else {
+      console.log('✅ Token cleared successfully');
+    }
+  } catch (error) {
+    console.error('❌ Error clearing token:', error);
   }
 };
 
@@ -104,15 +208,117 @@ export const login = createAsyncThunk(
       
       // Use direct axios for login to avoid interceptor issues
       const response = await axios.post(`${API_URL}/auth/login`, credentials);
-      const token = response.data.token;
+      
+      // Log entire response structure for debugging
+      console.log('🔍 Login response status:', response.status);
+      console.log('🔍 Login response data:', JSON.stringify(response.data, null, 2));
+      
+      // Check response structure
+      if (!response.data) {
+        console.error('❌ Login response missing data object');
+        throw new Error('Invalid login response structure');
+      }
+      
+      // Try different possible token locations, including nested structures
+      let token = null;
+      
+      // Check for nested data structure (response.data.data.token)
+      if (response.data.data && response.data.data.token) {
+        token = response.data.data.token;
+        console.log('🔑 Found token in nested structure: response.data.data.token');
+      } else {
+        // Try standard locations
+        const possibleTokenKeys = ['token', 'accessToken', 'access_token', 'auth_token', 'jwt', 'authToken'];
+        
+        for (const key of possibleTokenKeys) {
+          if (response.data[key]) {
+            token = response.data[key];
+            console.log(`🔑 Found token in response.data.${key}`);
+            break;
+          }
+        }
+      }
+      
+      // If no token found yet, try looking for JWT-like strings
+      if (!token) {
+        const jwtPattern = /^ey[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}$/;
+        
+        // Check for JWT pattern in nested structure
+        if (response.data.data) {
+          const nestedProps = Object.entries(response.data.data)
+            .filter(([_, value]) => typeof value === 'string' && jwtPattern.test(value as string));
+            
+          if (nestedProps.length > 0) {
+            const [key, value] = nestedProps[0];
+            token = value as string;
+            console.log(`🔑 Using JWT-like string from response.data.data.${key}`);
+          }
+        }
+        
+        // Check at root level too
+        if (!token) {
+          const rootProps = Object.entries(response.data)
+            .filter(([_, value]) => typeof value === 'string' && jwtPattern.test(value as string));
+            
+          if (rootProps.length > 0) {
+            const [key, value] = rootProps[0];
+            token = value as string;
+            console.log(`🔑 Using JWT-like string from response.data.${key}`);
+          }
+        }
+      }
+      
+      console.log('🔓 Login successful, token found:', token ? token.substring(0, 15) + '...' : 'no token');
       
       // Store token in secure storage
-      await setToken(token);
+      if (!token) {
+        console.log('🔍 Checking nested data structure...');
+        console.log('- Response has nested data:', response.data.data ? 'Yes' : 'No');
+        if (response.data.data) {
+          console.log('- Nested data keys:', Object.keys(response.data.data));
+        }
+        
+        console.error('❌ No token received from login response!');
+        throw new Error('No authentication token received');
+      }
+      
+      // Make extra effort to store token
+      try {
+        console.log('🔑 Storing token in secure storage...', token.substring(0, 15) + '...');
+        
+        // Try saving token directly first
+        if (isElectron()) {
+          const result = await window.electron.setAuthToken(token);
+          console.log('🔑 Direct electron token save result:', result);
+        } else {
+          localStorage.setItem('auth_token', token);
+          console.log('🔑 Direct localStorage token save completed');
+        }
+        
+        // Also use our helper
+        await setToken(token);
+        
+        // Double-check token was saved
+        const savedToken = await getToken();
+        if (!savedToken) {
+          console.error('❌ Failed to save token to storage during login!');
+          // Try again with a small delay
+          setTimeout(async () => {
+            console.log('🔄 Retrying token save...');
+            await setToken(token);
+          }, 100);
+        } else {
+          console.log('✅ Token successfully verified in storage:', 
+                    savedToken ? savedToken.substring(0, 15) + '...' : 'missing');
+        }
+      } catch (storageError) {
+        console.error('❌ Error storing token:', storageError);
+      }
       
       // Decode token to ensure it's valid and log data
       try {
         const decoded = jwtDecode<JwtPayload>(token);
-        console.log('🔓 Login successful, token decoded:', {
+        console.log('🔓 Token decoded:', {
           userId: decoded.userId,
           email: decoded.email,
           name: decoded.name,

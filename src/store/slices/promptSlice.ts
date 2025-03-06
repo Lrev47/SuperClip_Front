@@ -47,6 +47,11 @@ interface UpdatePromptData {
   isFavorite?: boolean;
 }
 
+interface UpdatePromptParams {
+  id: string;
+  promptData: UpdatePromptData;
+}
+
 // Initial state
 const initialState: PromptState = {
   prompts: [],
@@ -73,7 +78,29 @@ export const fetchPrompts = createAsyncThunk(
     try {
       // Using our configured API instance with auth interceptors
       const response = await api.get('/prompts');
-      return response.data;
+      
+      // Log the response structure
+      console.log('🔍 Prompts API response:', JSON.stringify(response.data, null, 2));
+      
+      // Handle nested response structure
+      let prompts;
+      if (response.data && response.data.data) {
+        // API returns { status: 'success', data: [...prompts] }
+        prompts = response.data.data;
+        console.log('🔍 Found prompts in nested data structure');
+      } else {
+        // Direct response format
+        prompts = response.data;
+        console.log('🔍 Using direct prompts data');
+      }
+      
+      // Ensure we have an array
+      if (!Array.isArray(prompts)) {
+        console.error('❌ Prompts data is not an array:', prompts);
+        prompts = []; // Return empty array to prevent errors
+      }
+      
+      return prompts;
     } catch (error: unknown) {
       const message = getErrorMessage(error);
       toast.error(message);
@@ -88,7 +115,23 @@ export const fetchPromptById = createAsyncThunk(
     try {
       // Using our configured API instance with auth interceptors
       const response = await api.get(`/prompts/${id}`);
-      return response.data;
+      
+      // Log the response structure
+      console.log(`🔍 Prompt ${id} API response:`, JSON.stringify(response.data, null, 2));
+      
+      // Handle nested response structure
+      let prompt;
+      if (response.data && response.data.data) {
+        // API returns { status: 'success', data: {...prompt} }
+        prompt = response.data.data;
+        console.log('🔍 Found prompt in nested data structure');
+      } else {
+        // Direct response format
+        prompt = response.data;
+        console.log('🔍 Using direct prompt data');
+      }
+      
+      return prompt;
     } catch (error: unknown) {
       const message = getErrorMessage(error);
       toast.error(message);
@@ -101,10 +144,18 @@ export const createPrompt = createAsyncThunk(
   'prompts/create',
   async (promptData: CreatePromptData, { rejectWithValue }) => {
     try {
-      // Using our configured API instance with auth interceptors
       const response = await api.post('/prompts', promptData);
+      
+      // Handle nested response structure
+      let newPrompt;
+      if (response.data && response.data.data) {
+        newPrompt = response.data.data;
+      } else {
+        newPrompt = response.data;
+      }
+      
       toast.success('Prompt created successfully');
-      return response.data;
+      return newPrompt;
     } catch (error: unknown) {
       const message = getErrorMessage(error);
       toast.error(message);
@@ -115,13 +166,20 @@ export const createPrompt = createAsyncThunk(
 
 export const updatePrompt = createAsyncThunk(
   'prompts/update',
-  async (promptData: UpdatePromptData, { rejectWithValue }) => {
+  async ({ id, promptData }: UpdatePromptParams, { rejectWithValue }) => {
     try {
-      const { id, ...updateData } = promptData;
-      // Using our configured API instance with auth interceptors
-      const response = await api.put(`/prompts/${id}`, updateData);
+      const response = await api.put(`/prompts/${id}`, promptData);
+      
+      // Handle nested response structure
+      let updatedPrompt;
+      if (response.data && response.data.data) {
+        updatedPrompt = response.data.data;
+      } else {
+        updatedPrompt = response.data;
+      }
+      
       toast.success('Prompt updated successfully');
-      return response.data;
+      return updatedPrompt;
     } catch (error: unknown) {
       const message = getErrorMessage(error);
       toast.error(message);
@@ -134,7 +192,6 @@ export const deletePrompt = createAsyncThunk(
   'prompts/delete',
   async (id: string, { rejectWithValue }) => {
     try {
-      // Using our configured API instance with auth interceptors
       await api.delete(`/prompts/${id}`);
       toast.success('Prompt deleted successfully');
       return id;

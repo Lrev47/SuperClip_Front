@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import { useAppDispatch, useAppSelector } from '@/hooks/redux';
 import { login, clearError } from '@/store/slices/authSlice';
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
+import axios from 'axios';
+import { API_URL } from '@/config';
 
 const LoginPage = () => {
   const dispatch = useAppDispatch();
@@ -35,11 +37,54 @@ const LoginPage = () => {
         .required('Password is required'),
     }),
     onSubmit: async (values) => {
-      console.log('🔑 Submitting login form');
-      await dispatch(login(values));
-      
-      // The navigation will happen in the useEffect above
-      // when isAuthenticated becomes true
+      try {
+        console.log('🔑 Submitting login form:', { email: values.email });
+        
+        // Direct check of login endpoint to debug response structure
+        try {
+          // Using fetch for simpler response inspection
+          console.log('🔍 Making direct fetch to login endpoint for debugging...');
+          const response = await fetch(`${API_URL}/auth/login`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              email: values.email,
+              password: values.password,
+            }),
+          });
+          
+          const contentType = response.headers.get('content-type');
+          console.log('🔍 Response status:', response.status);
+          console.log('🔍 Response content-type:', contentType);
+          
+          // Parse response based on content type
+          let data;
+          if (contentType && contentType.includes('application/json')) {
+            data = await response.json();
+            console.log('🔍 Response data (JSON):', data);
+          } else {
+            const text = await response.text();
+            console.log('🔍 Response data (text):', text);
+          }
+        } catch (debugError) {
+          console.error('🔍 Debug request error:', debugError);
+        }
+        
+        // Continue with normal Redux login
+        const result = await dispatch(login({
+          email: values.email,
+          password: values.password
+        }));
+        
+        // Clear form on success
+        if (!axios.isAxiosError(result.payload)) {
+          formik.resetForm();
+        }
+      } catch (error) {
+        console.error('Login error:', error);
+      }
     },
   });
 

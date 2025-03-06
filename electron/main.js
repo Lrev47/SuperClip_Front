@@ -2,12 +2,67 @@ const { app, BrowserWindow, ipcMain, Menu, Tray, clipboard, dialog, shell } = re
 const path = require('path');
 const isDev = require('electron-is-dev');
 const Store = require('electron-store');
+const { globalShortcut } = require('electron');
+const fs = require('fs');
 
 // Initialize electron-store
 const store = new Store();
 
+// Setup logging to file
+const setupLogging = () => {
+  const logDir = path.join(app.getPath('userData'), 'logs');
+  
+  // Create logs directory if it doesn't exist
+  if (!fs.existsSync(logDir)) {
+    fs.mkdirSync(logDir, { recursive: true });
+  }
+  
+  const logFile = path.join(logDir, `superclip-${new Date().toISOString().split('T')[0]}.log`);
+  console.log(`Logging to file: ${logFile}`);
+  
+  // Create write stream
+  const logStream = fs.createWriteStream(logFile, { flags: 'a' });
+  
+  // Override console methods
+  const originalConsoleLog = console.log;
+  const originalConsoleError = console.error;
+  const originalConsoleWarn = console.warn;
+  
+  // Helper to write to both console and file
+  const logToFileAndConsole = (type, args) => {
+    const timestamp = new Date().toISOString();
+    const message = args.map(arg => 
+      typeof arg === 'object' ? JSON.stringify(arg, null, 2) : arg
+    ).join(' ');
+    
+    logStream.write(`[${timestamp}] [${type}] ${message}\n`);
+    
+    // Call original console method
+    return type === 'log' 
+      ? originalConsoleLog(...args)
+      : type === 'error'
+        ? originalConsoleError(...args)
+        : originalConsoleWarn(...args);
+  };
+  
+  // Override console methods
+  console.log = (...args) => logToFileAndConsole('log', args);
+  console.error = (...args) => logToFileAndConsole('error', args);
+  console.warn = (...args) => logToFileAndConsole('warn', args);
+  
+  // Add a shutdown handler to close the log stream
+  app.on('will-quit', () => {
+    console.log('Application shutting down, closing log stream');
+    logStream.end();
+  });
+  
+  return logFile;
+};
+
+// Create globals
 let mainWindow;
 let tray = null;
+let logFile = null;
 
 // Create the main application window
 function createWindow() {
@@ -36,9 +91,23 @@ function createWindow() {
 
   mainWindow.loadURL(startUrl);
 
+  // Open DevTools automatically in development mode
+  if (isDev) {
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
+    console.log('DevTools opened automatically in development mode');
+  }
+
   // Show window when it's ready to prevent flickering
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
+  });
+
+  // Create a global shortcut to open DevTools
+  globalShortcut.register('CommandOrControl+Shift+I', () => {
+    if (mainWindow && mainWindow.webContents) {
+      mainWindow.webContents.toggleDevTools();
+      console.log('DevTools toggled with keyboard shortcut');
+    }
   });
 
   // Handle window close event
@@ -103,6 +172,28 @@ function createWindow() {
             mainWindow.webContents.send('navigate', '/about');
           },
         },
+        { type: 'separator' },
+        {
+          label: 'Open Console Logs Folder',
+          click: () => {
+            const logDir = path.join(app.getPath('userData'), 'logs');
+            shell.openPath(logDir);
+          },
+        },
+        {
+          label: 'Open Current Log File',
+          click: () => {
+            if (logFile) {
+              shell.openPath(logFile);
+            } else {
+              dialog.showMessageBox(mainWindow, {
+                type: 'error',
+                title: 'Log File Not Available',
+                message: 'No log file is currently active.'
+              });
+            }
+          },
+        },
       ],
     },
   ];
@@ -150,10 +241,32 @@ function createTray() {
   });
 }
 
-// App ready event
+// Setup app when ready
 app.whenReady().then(() => {
+  // Initialize logging first
+  logFile = setupLogging();
+  console.log('SuperClip starting up...');
+  
+  // Create main window
   createWindow();
+  
+  // Create tray icon
   createTray();
+  
+  // Add developer menu if in dev mode
+  if (isDev) {
+    console.log('Running in development mode');
+  } else {
+    console.log('Running in production mode');
+  }
+  
+  // Log app info
+  console.log(`App version: ${app.getVersion()}`);
+  console.log(`Electron version: ${process.versions.electron}`);
+  console.log(`Chrome version: ${process.versions.chrome}`);
+  console.log(`Node version: ${process.versions.node}`);
+  console.log(`Platform: ${process.platform} ${process.arch}`);
+  console.log(`User data path: ${app.getPath('userData')}`);
 
   // Re-create window if it's closed and user clicks on dock/taskbar icon (macOS)
   app.on('activate', () => {
@@ -240,5 +353,32 @@ ipcMain.on('window-control', (event, action) => {
     case 'close':
       mainWindow.close();
       break;
+  }
+});
+
+// IPC handlers for logs
+ipcMain.handle('get-logs-path', async (event) => {
+  return path.join(app.getPath('userData'), 'logs');
+});
+
+ipcMain.handle('get-current-log', async (event) => {
+  return logFile;
+});
+
+ipcMain.handle('read-logs', async (event, filePath) => {
+  try {
+    const content = fs.readFileSync(filePath, 'utf8');
+    return content;
+  } catch (error) {
+    console.error('Error reading log file:', error);
+    return null;
+  }
+});
+
+// IPC handler for DevTools
+ipcMain.on('open-dev-tools', (event) => {
+  if (mainWindow && mainWindow.webContents) {
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
+    console.log('DevTools opened via IPC command');
   }
 }); 

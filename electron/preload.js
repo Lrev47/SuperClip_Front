@@ -28,4 +28,12 @@ contextBridge.exposeInMainWorld('electron', {
     // Add new listener
     ipcRenderer.on('navigate', (event, path) => callback(path));
   },
+  
+  // Logging
+  getLogsPath: () => ipcRenderer.invoke('get-logs-path'),
+  getCurrentLog: () => ipcRenderer.invoke('get-current-log'),
+  readLogs: (filePath) => ipcRenderer.invoke('read-logs', filePath),
+  
+  // Developer Tools
+  openDevTools: () => ipcRenderer.send('open-dev-tools'),
 }); 

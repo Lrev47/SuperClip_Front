@@ -34,8 +34,27 @@ const App = () => {
   useEffect(() => {
     console.log('🔒 Initial auth check');
     const checkAuthentication = async () => {
-      await dispatch(checkAuth());
-      setAuthChecked(true);
+      try {
+        // Try to get the token directly first, for debugging
+        if (isElectron()) {
+          try {
+            const directToken = await window.electron.getAuthToken();
+            console.log('🔑 Direct Electron token check:', directToken ? 'Token exists' : 'No token');
+          } catch (e) {
+            console.error('❌ Error in direct token check:', e);
+          }
+        } else {
+          const localToken = localStorage.getItem('auth_token');
+          console.log('🔑 Direct localStorage token check:', localToken ? 'Token exists' : 'No token');
+        }
+        
+        // Proceed with normal auth check via Redux
+        await dispatch(checkAuth());
+        setAuthChecked(true);
+      } catch (error) {
+        console.error('❌ Error in authentication check:', error);
+        setAuthChecked(true);
+      }
     };
     checkAuthentication();
   }, [dispatch]);

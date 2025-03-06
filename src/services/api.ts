@@ -57,6 +57,8 @@ export const setAuthenticating = (value: boolean) => {
 api.interceptors.request.use(
   async (config) => {
     try {
+      console.log('🔍 Request interceptor for URL:', config.url);
+      
       // Don't add auth token to auth endpoints
       const isAuthEndpoint = config.url?.includes('/auth/login') || 
                             config.url?.includes('/auth/register');
@@ -71,15 +73,34 @@ api.interceptors.request.use(
       // Get token from appropriate storage based on environment
       if (isElectron()) {
         token = await window.electron.getAuthToken();
-        console.log('🔒 Electron token:', token ? 'Found' : 'Not found');
+        console.log('🔒 Electron token for', config.url, ':', token ? token.substring(0, 15) + '...' : 'Not found');
+        
+        // If no token in electron store, check localStorage as fallback
+        if (!token) {
+          const localToken = localStorage.getItem('auth_token');
+          if (localToken) {
+            console.log('🔒 Fallback: Found token in localStorage, will use it for this request');
+            token = localToken;
+            
+            // Try to save it to electron store for future use
+            try {
+              const result = await window.electron.setAuthToken(localToken);
+              console.log('🔒 Saved localStorage token to electron store:', result);
+            } catch (e) {
+              console.error('❌ Failed to save token to electron store:', e);
+            }
+          }
+        }
       } else {
         token = getBrowserToken();
-        console.log('🔒 Browser token:', token ? 'Found' : 'Not found');
+        console.log('🔒 Browser token for', config.url, ':', token ? token.substring(0, 15) + '...' : 'Not found');
       }
       
       if (token && isTokenValid(token)) {
         config.headers.Authorization = `Bearer ${token}`;
-        console.log('🔑 Added auth token to request:', config.url);
+        console.log('🔑 Added auth token to request:', config.url, 'Authorization:', `Bearer ${token.substring(0, 15)}...`);
+        // Log all headers for debugging
+        console.log('📤 Request headers:', JSON.stringify(config.headers));
       } else if (token) {
         console.warn('⚠️ Token found but invalid, not adding to request:', config.url);
         // We could clear the token here, but let's let the checkAuth handle that
@@ -108,6 +129,30 @@ api.interceptors.response.use(
     
     if (isAuthResponse) {
       setAuthenticating(false);
+      
+      // Check for token in response and log it
+      if (response.data) {
+        console.log('🔍 Auth response data keys:', Object.keys(response.data));
+        
+        // Check possible token locations
+        const possibleTokenKeys = ['token', 'accessToken', 'access_token', 'auth_token', 'jwt', 'authToken'];
+        for (const key of possibleTokenKeys) {
+          if (response.data[key]) {
+            console.log(`🔑 Found token in response.data.${key}:`, response.data[key].substring(0, 15) + '...');
+            break;
+          }
+        }
+        
+        // Check if there's a property that looks like a JWT
+        const jwtPattern = /^ey[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}$/;
+        const jwtProps = Object.entries(response.data)
+          .filter(([_, value]) => typeof value === 'string' && jwtPattern.test(value as string));
+          
+        if (jwtProps.length > 0) {
+          console.log('🔍 Found properties that look like JWTs:', 
+            jwtProps.map(([key]) => key).join(', '));
+        }
+      }
     }
     
     console.log('✅ API response success:', response.config.url);

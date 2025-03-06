@@ -63,7 +63,29 @@ export const fetchCategories = createAsyncThunk(
     try {
       // Using our configured API instance with auth interceptors
       const response = await api.get('/categories');
-      return response.data;
+      
+      // Log the response structure
+      console.log('🔍 Categories API response:', JSON.stringify(response.data, null, 2));
+      
+      // Handle nested response structure
+      let categories;
+      if (response.data && response.data.data) {
+        // API returns { status: 'success', data: [...categories] }
+        categories = response.data.data;
+        console.log('🔍 Found categories in nested data structure');
+      } else {
+        // Direct response format
+        categories = response.data;
+        console.log('🔍 Using direct categories data');
+      }
+      
+      // Ensure we have an array
+      if (!Array.isArray(categories)) {
+        console.error('❌ Categories data is not an array:', categories);
+        categories = []; // Return empty array to prevent errors
+      }
+      
+      return categories;
     } catch (error: unknown) {
       const message = getErrorMessage(error);
       toast.error(message);
@@ -78,8 +100,17 @@ export const createCategory = createAsyncThunk(
     try {
       // Using our configured API instance with auth interceptors
       const response = await api.post('/categories', categoryData);
+      
+      // Handle nested response structure
+      let newCategory;
+      if (response.data && response.data.data) {
+        newCategory = response.data.data;
+      } else {
+        newCategory = response.data;
+      }
+      
       toast.success('Category created successfully');
-      return response.data;
+      return newCategory;
     } catch (error: unknown) {
       const message = getErrorMessage(error);
       toast.error(message);
@@ -90,13 +121,21 @@ export const createCategory = createAsyncThunk(
 
 export const updateCategory = createAsyncThunk(
   'categories/updateCategory',
-  async (categoryData: UpdateCategoryData, { rejectWithValue }) => {
+  async ({ id, categoryData }: { id: string, categoryData: any }, { rejectWithValue }) => {
     try {
-      const { id, ...updateData } = categoryData;
       // Using our configured API instance with auth interceptors
-      const response = await api.put(`/categories/${id}`, updateData);
+      const response = await api.put(`/categories/${id}`, categoryData);
+      
+      // Handle nested response structure
+      let updatedCategory;
+      if (response.data && response.data.data) {
+        updatedCategory = response.data.data;
+      } else {
+        updatedCategory = response.data;
+      }
+      
       toast.success('Category updated successfully');
-      return response.data;
+      return updatedCategory;
     } catch (error: unknown) {
       const message = getErrorMessage(error);
       toast.error(message);

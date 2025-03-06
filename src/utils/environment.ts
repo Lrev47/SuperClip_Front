@@ -6,7 +6,31 @@
  * Check if the app is running in Electron
  */
 export const isElectron = (): boolean => {
-  return window && 'electron' in window && typeof window.electron.getAuthToken === 'function';
+  try {
+    // First check if running in node environment with process
+    const isNode = typeof process !== 'undefined' && process.versions && process.versions.electron;
+    
+    // Then check if window.electron API is available
+    const hasElectronAPI = window && 'electron' in window && typeof window.electron.getAuthToken === 'function';
+    
+    const result = Boolean(isNode || hasElectronAPI);
+    
+    // Only log this sometimes to avoid excessive logging
+    if (Math.random() < 0.1) {
+      console.log('🔧 Environment detection:', {
+        isElectron: result,
+        isNode,
+        hasElectronAPI,
+        electronAPIKeys: window?.electron ? Object.keys(window.electron) : 'none',
+        userAgent: navigator.userAgent
+      });
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('❌ Error detecting environment:', error);
+    return false;
+  }
 };
 
 /**
