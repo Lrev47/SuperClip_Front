@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Cape -->
+  <path d="M360 120C360 120 380 180 330 280C280 380 240 400 200 360" 
+        fill="#FF4D4D" stroke="#CC0000" stroke-width="12" stroke-linecap="round"/>
+  
+  <!-- Paper Clip Body - Main Curve -->
+  <path d="M300 140C300 80 260 60 220 60C180 60 140 80 140 140C140 200 140 320 140 380C140 440 180 460 220 460C260 460 300 440 300 380" 
+        stroke="#4D7FFF" stroke-width="24" stroke-linecap="round" fill="none"/>
+  
+  <!-- Paper Clip Body - Small Curve -->
+  <path d="M260 180C260 150 240 140 220 140C200 140 180 150 180 180C180 210 180 270 180 300C180 330 200 340 220 340C240 340 260 330 260 300" 
+        stroke="#4D7FFF" stroke-width="24" stroke-linecap="round" fill="none"/>
+  
+  <!-- Superhero Mask -->
+  <path d="M220 100C220 100 205 110 205 120C205 130 235 130 235 120C235 110 220 100 220 100Z" 
+        fill="#333333"/>
+  
+  <!-- Shield Emblem -->
+  <circle cx="220" cy="220" r="25" fill="#FFD700" stroke="#CC9900" stroke-width="4"/>
+  <path d="M210 220L218 228L232 214" stroke="#333333" stroke-width="4" stroke-linecap="round"/>
+</svg> 
