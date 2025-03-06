@@ -7,6 +7,10 @@ interface ElectronAPI {
   showSaveDialog: (options: { defaultPath?: string }) => Promise<{ canceled: boolean; filePath?: string }>;
   openExternalLink: (url: string) => Promise<boolean>;
   windowControl: (action: 'minimize' | 'maximize' | 'close') => void;
+  isWindowMaximized: () => Promise<boolean>;
+  isFullScreen: () => Promise<boolean>;
+  onMaximizeChange: (callback: (event: any, maximized: boolean) => void) => void;
+  onFullScreenChange: (callback: (event: any, isFullScreen: boolean) => void) => void;
   onNavigate: (callback: (path: string) => void) => void;
 }
 

@@ -23,6 +23,9 @@ import ProtectedRoute from './components/auth/ProtectedRoute';
 import TitleBar from './components/ui/TitleBar';
 import { isElectron } from './utils/environment';
 
+// Modals
+import CreatePromptModal from './components/prompts/CreatePromptModal';
+
 const App = () => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
@@ -92,9 +95,9 @@ const App = () => {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="app-container">
       <TitleBar />
-      <div className="flex-1 overflow-hidden">
+      <div className="app-content">
         <Routes>
           {/* Auth Routes */}
           <Route element={<AuthLayout />}>
@@ -136,6 +139,12 @@ const App = () => {
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </div>
+
+      {/* Modals */}
+      <CreatePromptModal />
+      
+      {/* Toaster for notifications */}
+      <div id="toast-container" className="fixed top-4 right-4 z-50" />
     </div>
   );
 };

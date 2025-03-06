@@ -104,7 +104,7 @@ const DashboardPage = () => {
                   <div>
                     <h3 className="font-medium text-white">{prompt.title}</h3>
                     <p className="text-sm text-gray-400 mt-1 line-clamp-1">
-                      {prompt.description || prompt.content.substring(0, 100)}
+                      {prompt.description || (prompt.content ? prompt.content.substring(0, 100) : 'No content')}
                     </p>
                   </div>
                   <button

@@ -63,6 +63,7 @@ const setupLogging = () => {
 let mainWindow;
 let tray = null;
 let logFile = null;
+let windowBounds = null; // Store window bounds before maximizing
 
 // Create the main application window
 function createWindow() {
@@ -82,6 +83,10 @@ function createWindow() {
     backgroundColor: '#1a1a1a',
     titleBarStyle: 'hidden',
     frame: false,
+    useContentSize: true, // Use content size for better sizing
+    center: true, // Center the window
+    thickFrame: false, // Disable thick frame for better precision
+    autoHideMenuBar: true, // Hide menu bar for cleaner look
   });
 
   // Load the app
@@ -100,6 +105,39 @@ function createWindow() {
   // Show window when it's ready to prevent flickering
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
+  });
+
+  // Set up window state change listeners
+  mainWindow.on('maximize', () => {
+    if (mainWindow && mainWindow.webContents) {
+      mainWindow.webContents.send('window-maximize-change', true);
+    }
+  });
+  
+  mainWindow.on('unmaximize', () => {
+    if (mainWindow && mainWindow.webContents) {
+      mainWindow.webContents.send('window-maximize-change', false);
+    }
+  });
+  
+  // Add fullscreen event handlers
+  mainWindow.on('enter-full-screen', () => {
+    if (mainWindow && mainWindow.webContents) {
+      mainWindow.webContents.send('full-screen-change', true);
+    }
+  });
+  
+  mainWindow.on('leave-full-screen', () => {
+    if (mainWindow && mainWindow.webContents) {
+      mainWindow.webContents.send('full-screen-change', false);
+    }
+  });
+
+  // Store window bounds before resizing
+  mainWindow.on('resize', () => {
+    if (!mainWindow.isMaximized() && !mainWindow.isMinimized() && !mainWindow.isFullScreen()) {
+      windowBounds = mainWindow.getBounds();
+    }
   });
 
   // Create a global shortcut to open DevTools
@@ -339,15 +377,44 @@ ipcMain.handle('open-external-link', async (event, url) => {
 
 // Handle window controls
 ipcMain.on('window-control', (event, action) => {
+  if (!mainWindow) return;
+  
   switch (action) {
     case 'minimize':
       mainWindow.minimize();
       break;
     case 'maximize':
-      if (mainWindow.isMaximized()) {
-        mainWindow.unmaximize();
+      // Store bounds before changing window state
+      if (!mainWindow.isMaximized() && !mainWindow.isFullScreen()) {
+        windowBounds = mainWindow.getBounds();
+      }
+      
+      if (mainWindow.isMaximized() || mainWindow.isFullScreen()) {
+        // Restore previous state
+        if (windowBounds) {
+          mainWindow.setBounds(windowBounds);
+        } else {
+          mainWindow.unmaximize();
+        }
+        mainWindow.setFullScreen(false);
+        mainWindow.webContents.send('window-maximize-change', false);
       } else {
-        mainWindow.maximize();
+        // For WSL/Windows environment, use a special approach
+        const isWSL = process.env.WSL_DISTRO_NAME || 
+                      (process.env.PATH && process.env.PATH.includes('wsl'));
+        
+        if (isWSL || process.platform === 'win32') {
+          // Use fullScreen mode for WSL which provides better coverage
+          mainWindow.setFullScreen(true);
+          
+          // Give the renderer a moment to update its state
+          setTimeout(() => {
+            mainWindow.webContents.send('window-maximize-change', true);
+          }, 100);
+        } else {
+          // For other platforms, use regular maximize
+          mainWindow.maximize();
+        }
       }
       break;
     case 'close':
@@ -381,4 +448,14 @@ ipcMain.on('open-dev-tools', (event) => {
     mainWindow.webContents.openDevTools({ mode: 'detach' });
     console.log('DevTools opened via IPC command');
   }
+});
+
+// Handle check if window is maximized
+ipcMain.handle('is-window-maximized', (event) => {
+  return mainWindow ? mainWindow.isMaximized() : false;
+});
+
+// Handle check if window is in fullscreen
+ipcMain.handle('is-full-screen', (event) => {
+  return mainWindow ? mainWindow.isFullScreen() : false;
 }); 

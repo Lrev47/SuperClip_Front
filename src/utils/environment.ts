@@ -106,6 +106,25 @@ export const createMockElectronAPI = () => {
       console.log(`🪟 Mock Electron: Window ${action} action (not available in browser)`);
     };
     
+    // Add mock window state methods
+    window.electron.isWindowMaximized = async () => {
+      console.log('🪟 Mock Electron: Checking if window is maximized (always false in browser)');
+      return false;
+    };
+    
+    window.electron.isFullScreen = async () => {
+      console.log('🪟 Mock Electron: Checking if window is fullscreen (always false in browser)');
+      return false;
+    };
+    
+    window.electron.onMaximizeChange = (callback) => {
+      console.log('🪟 Mock Electron: Window maximize change event registered (not functional in browser)');
+    };
+    
+    window.electron.onFullScreenChange = (callback) => {
+      console.log('🪟 Mock Electron: Window fullscreen change event registered (not functional in browser)');
+    };
+    
     // Implement navigation event methods
     window.electron.onNavigate = (callback) => {
       console.log('🧭 Mock Electron: Navigation events registered (not functional in browser)');

@@ -57,7 +57,7 @@ const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
     <div
       className={`flex flex-col h-full bg-dark-900 border-r border-dark-700 transition-all duration-300 ${
         collapsed ? 'w-16' : 'w-64'
-      }`}
+      } flex-shrink-0 sidebar-container`}
     >
       {/* Sidebar Header */}
       <div className="flex items-center justify-between h-16 px-4 border-b border-dark-700">
@@ -81,31 +81,37 @@ const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
         <NavLink
           to="/dashboard"
           className={({ isActive }) =>
-            `sidebar-item ${isActive ? 'sidebar-item-active' : 'sidebar-item-inactive'}`
+            `sidebar-item ${isActive ? 'sidebar-item-active' : 'sidebar-item-inactive'} block`
           }
         >
-          <HomeIcon className="h-5 w-5 mr-3" />
-          {!collapsed && <span>Dashboard</span>}
+          <div className="flex items-center">
+            <HomeIcon className="h-5 w-5 mr-3" />
+            {!collapsed && <span>Dashboard</span>}
+          </div>
         </NavLink>
 
         <NavLink
           to="/prompts"
           className={({ isActive }) =>
-            `sidebar-item ${isActive ? 'sidebar-item-active' : 'sidebar-item-inactive'}`
+            `sidebar-item ${isActive ? 'sidebar-item-active' : 'sidebar-item-inactive'} block`
           }
         >
-          <DocumentTextIcon className="h-5 w-5 mr-3" />
-          {!collapsed && <span>All Prompts</span>}
+          <div className="flex items-center">
+            <DocumentTextIcon className="h-5 w-5 mr-3" />
+            {!collapsed && <span>All Prompts</span>}
+          </div>
         </NavLink>
 
         <NavLink
           to="/generator"
           className={({ isActive }) =>
-            `sidebar-item ${isActive ? 'sidebar-item-active' : 'sidebar-item-inactive'}`
+            `sidebar-item ${isActive ? 'sidebar-item-active' : 'sidebar-item-inactive'} block`
           }
         >
-          <SparklesIcon className="h-5 w-5 mr-3" />
-          {!collapsed && <span>AI Generator</span>}
+          <div className="flex items-center">
+            <SparklesIcon className="h-5 w-5 mr-3" />
+            {!collapsed && <span>AI Generator</span>}
+          </div>
         </NavLink>
 
         {/* Categories Section */}
@@ -127,17 +133,19 @@ const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
                 <div key={category.id}>
                   <button
                     onClick={() => handleCategoryClick(category.id)}
-                    className={`sidebar-item w-full text-left ${
+                    className={`sidebar-item w-full text-left block ${
                       currentCategoryId === category.id
                         ? 'sidebar-item-active'
                         : 'sidebar-item-inactive'
                     }`}
                   >
-                    <FolderIcon
-                      className="h-5 w-5 mr-3"
-                      style={{ color: category.color || '#9ca3af' }}
-                    />
-                    <span className="truncate">{category.name}</span>
+                    <div className="flex items-center">
+                      <FolderIcon
+                        className="h-5 w-5 mr-3"
+                        style={{ color: category.color || '#9ca3af' }}
+                      />
+                      <span className="truncate">{category.name}</span>
+                    </div>
                   </button>
                   {/* Render children if any */}
                   {category.children && category.children.length > 0 && (
@@ -146,17 +154,19 @@ const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
                         <button
                           key={child.id}
                           onClick={() => handleCategoryClick(child.id)}
-                          className={`sidebar-item w-full text-left ${
+                          className={`sidebar-item w-full text-left block ${
                             currentCategoryId === child.id
                               ? 'sidebar-item-active'
                               : 'sidebar-item-inactive'
                           }`}
                         >
-                          <FolderIcon
-                            className="h-4 w-4 mr-3"
-                            style={{ color: child.color || '#9ca3af' }}
-                          />
-                          <span className="truncate">{child.name}</span>
+                          <div className="flex items-center">
+                            <FolderIcon
+                              className="h-4 w-4 mr-3"
+                              style={{ color: child.color || '#9ca3af' }}
+                            />
+                            <span className="truncate">{child.name}</span>
+                          </div>
                         </button>
                       ))}
                     </div>
@@ -166,61 +176,9 @@ const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
             </div>
           </div>
         )}
-
-        {/* Favorites Section */}
-        <NavLink
-          to="/prompts?favorite=true"
-          className={({ isActive }) =>
-            `sidebar-item ${
-              isActive || location.search.includes('favorite=true')
-                ? 'sidebar-item-active'
-                : 'sidebar-item-inactive'
-            }`
-          }
-        >
-          <StarIcon className="h-5 w-5 mr-3 text-yellow-500" />
-          {!collapsed && <span>Favorites</span>}
-        </NavLink>
-
-        {/* Settings */}
-        <NavLink
-          to="/settings"
-          className={({ isActive }) =>
-            `sidebar-item ${isActive ? 'sidebar-item-active' : 'sidebar-item-inactive'}`
-          }
-        >
-          <Cog6ToothIcon className="h-5 w-5 mr-3" />
-          {!collapsed && <span>Settings</span>}
-        </NavLink>
       </nav>
-
-      {/* User Section */}
-      <div className="border-t border-dark-700 p-4">
-        <div className="flex items-center">
-          <div className="flex-shrink-0">
-            <div className="h-8 w-8 rounded-full bg-primary-700 flex items-center justify-center">
-              <span className="text-white font-medium text-sm">
-                {user?.name?.charAt(0) || 'U'}
-              </span>
-            </div>
-          </div>
-          {!collapsed && (
-            <div className="ml-3">
-              <p className="text-sm font-medium text-white truncate">{user?.name}</p>
-              <p className="text-xs text-gray-400 truncate">{user?.email}</p>
-            </div>
-          )}
-          <button
-            onClick={handleLogout}
-            className="ml-auto p-1 rounded-md hover:bg-dark-700 focus:outline-none"
-            title="Logout"
-          >
-            <ArrowLeftOnRectangleIcon className="h-5 w-5 text-gray-400" />
-          </button>
-        </div>
-      </div>
     </div>
   );
 };
 
-export default Sidebar; 
+export default Sidebar;

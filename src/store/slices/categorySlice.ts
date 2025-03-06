@@ -96,10 +96,27 @@ export const fetchCategories = createAsyncThunk(
 
 export const createCategory = createAsyncThunk(
   'categories/createCategory',
-  async (categoryData: CreateCategoryData, { rejectWithValue }) => {
+  async (categoryData: CreateCategoryData, { rejectWithValue, dispatch }) => {
     try {
+      // Log the data being sent
+      console.log('🔍 Creating category with data:', JSON.stringify(categoryData, null, 2));
+      
+      // Make sure the required fields are present
+      if (!categoryData.name?.trim()) {
+        throw new Error('Category name is required');
+      }
+      
+      // Format the data to match what the backend expects
+      const formattedData = {
+        name: categoryData.name.trim(),
+        description: categoryData.description ? categoryData.description.trim() : '',
+        color: categoryData.color || '#6366F1', // Default color if not provided
+      };
+      
+      console.log('🔍 Sending formatted category data:', formattedData);
+      
       // Using our configured API instance with auth interceptors
-      const response = await api.post('/categories', categoryData);
+      const response = await api.post('/categories', formattedData);
       
       // Handle nested response structure
       let newCategory;
@@ -110,11 +127,37 @@ export const createCategory = createAsyncThunk(
       }
       
       toast.success('Category created successfully');
+      
+      // Refresh the categories list
+      dispatch(fetchCategories());
+      
       return newCategory;
     } catch (error: unknown) {
-      const message = getErrorMessage(error);
-      toast.error(message);
-      return rejectWithValue(message);
+      // Enhanced error handling
+      let errorMessage = 'Failed to create category';
+      
+      if (axios.isAxiosError(error)) {
+        // Extract detailed error message from API response
+        const axiosError = error as AxiosError<ApiError>;
+        
+        if (axiosError.response?.data) {
+          // Try to extract the message from various response formats
+          if (typeof axiosError.response.data === 'string') {
+            errorMessage = axiosError.response.data;
+          } else if (axiosError.response.data.message) {
+            errorMessage = axiosError.response.data.message;
+          } else if ((axiosError.response.data as any).error) {
+            errorMessage = (axiosError.response.data as any).error;
+          }
+        }
+        
+        console.error('❌ Create category error:', errorMessage, axiosError.response?.data);
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      
+      toast.error(errorMessage);
+      return rejectWithValue(errorMessage);
     }
   }
 );

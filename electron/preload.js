@@ -20,6 +20,23 @@ contextBridge.exposeInMainWorld('electron', {
   
   // Window controls
   windowControl: (action) => ipcRenderer.send('window-control', action),
+  isWindowMaximized: () => ipcRenderer.invoke('is-window-maximized'),
+  isFullScreen: () => ipcRenderer.invoke('is-full-screen'),
+  
+  // Event listeners
+  onMaximizeChange: (callback) => {
+    // Remove any existing listeners to avoid memory leaks
+    ipcRenderer.removeAllListeners('window-maximize-change');
+    // Add new listener
+    ipcRenderer.on('window-maximize-change', callback);
+  },
+  
+  onFullScreenChange: (callback) => {
+    // Remove any existing listeners to avoid memory leaks
+    ipcRenderer.removeAllListeners('full-screen-change');
+    // Add new listener
+    ipcRenderer.on('full-screen-change', callback);
+  },
   
   // Navigation
   onNavigate: (callback) => {

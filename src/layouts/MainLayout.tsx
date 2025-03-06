@@ -17,17 +17,17 @@ const MainLayout = () => {
   }, [dispatch]);
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="main-layout">
       {/* Sidebar */}
       <Sidebar collapsed={sidebarCollapsed} onToggle={() => dispatch(toggleSidebar())} />
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="main-content">
         {/* Search Bar */}
         {searchOpen && <SearchBar />}
 
         {/* Content Area */}
-        <main className="flex-1 overflow-auto p-6 bg-dark-800">
+        <main className="content-area">
           <Outlet />
         </main>
       </div>

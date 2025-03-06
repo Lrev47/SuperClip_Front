@@ -3,18 +3,100 @@
 @tailwind utilities;
 
 @layer base {
-  html {
-    @apply h-full;
+  *, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
   }
-  body {
-    @apply h-full overflow-hidden;
+  
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
   }
+  
   #root {
-    @apply h-full;
+    display: flex;
+    flex-direction: column;
+    width: 100vw;
+    height: 100vh;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
   }
 }
 
 @layer components {
+  /* Application container */
+  .app-container {
+    display: flex;
+    flex-direction: column;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    margin: 0;
+    padding: 0;
+    background-color: theme('colors.dark.800');
+  }
+  
+  .app-content {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    position: relative;
+    width: 100%;
+    height: calc(100% - 32px); /* Subtract title bar height */
+  }
+  
+  /* Main layout */
+  .main-layout {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+  
+  .main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    width: 100%;
+    height: 100%;
+    background-color: theme('colors.dark.800');
+  }
+  
+  .content-area {
+    flex: 1;
+    overflow: auto;
+    padding: 1.5rem; /* 24px */
+    width: 100%;
+  }
+  
+  /* Sidebar styles */
+  .sidebar-container {
+    height: 100%;
+    position: relative;
+    margin: 0;
+    padding: 0;
+    left: 0;
+    border-right: 1px solid theme('colors.dark.700');
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
   .btn {
     @apply px-4 py-2 rounded-md font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-dark-800 focus:ring-primary-500;
   }
@@ -37,7 +119,7 @@
     @apply bg-dark-800 border border-dark-700 rounded-lg shadow-lg overflow-hidden;
   }
   .sidebar-item {
-    @apply flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors;
+    @apply flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors relative;
   }
   .sidebar-item-active {
     @apply bg-dark-700 text-white;

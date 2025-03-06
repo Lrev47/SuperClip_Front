@@ -83,22 +83,59 @@ export const fetchPrompts = createAsyncThunk(
       console.log('🔍 Prompts API response:', JSON.stringify(response.data, null, 2));
       
       // Handle nested response structure
-      let prompts;
+      let prompts: Prompt[];
+      
       if (response.data && response.data.data) {
         // API returns { status: 'success', data: [...prompts] }
-        prompts = response.data.data;
-        console.log('🔍 Found prompts in nested data structure');
-      } else {
-        // Direct response format
+        if (Array.isArray(response.data.data)) {
+          prompts = response.data.data;
+          console.log('🔍 Found prompts array in nested data structure');
+        } 
+        // Handle case where it returns { status: 'success', data: { prompts: [...] } }
+        else if (response.data.data.prompts && Array.isArray(response.data.data.prompts)) {
+          prompts = response.data.data.prompts;
+          console.log('🔍 Found prompts in deeper nested structure: data.data.prompts');
+        } 
+        // Try to find any array property
+        else {
+          const arrayProps = Object.entries(response.data.data)
+            .find(([_, value]) => Array.isArray(value));
+            
+          if (arrayProps) {
+            console.log(`🔍 Found array in property: data.data.${arrayProps[0]}`);
+            prompts = arrayProps[1] as Prompt[];
+          } else {
+            console.error('❌ Could not find a prompts array in the response');
+            prompts = [];
+          }
+        }
+      } else if (Array.isArray(response.data)) {
+        // Direct array response
         prompts = response.data;
-        console.log('🔍 Using direct prompts data');
+        console.log('🔍 Using direct prompts data (array)');
+      } else if (response.data.prompts && Array.isArray(response.data.prompts)) {
+        // Handle { prompts: [...] } structure
+        prompts = response.data.prompts;
+        console.log('🔍 Found prompts in response.data.prompts');
+      } else {
+        // Default to empty array if no recognizable structure
+        console.error('❌ Response does not contain a recognizable prompts structure:', response.data);
+        prompts = [];
       }
       
-      // Ensure we have an array
-      if (!Array.isArray(prompts)) {
-        console.error('❌ Prompts data is not an array:', prompts);
-        prompts = []; // Return empty array to prevent errors
-      }
+      // Ensure each prompt has the expected properties
+      prompts = prompts.map(prompt => ({
+        ...prompt,
+        // Ensure content exists and is a string
+        content: typeof prompt.content === 'string' ? prompt.content : '',
+        // Ensure other required fields
+        id: prompt.id || '',
+        title: prompt.title || 'Untitled',
+        description: prompt.description || '',
+        isFavorite: Boolean(prompt.isFavorite),
+        createdAt: prompt.createdAt || new Date().toISOString(),
+        updatedAt: prompt.updatedAt || new Date().toISOString(),
+      }));
       
       return prompts;
     } catch (error: unknown) {
@@ -142,9 +179,33 @@ export const fetchPromptById = createAsyncThunk(
 
 export const createPrompt = createAsyncThunk(
   'prompts/create',
-  async (promptData: CreatePromptData, { rejectWithValue }) => {
+  async (promptData: CreatePromptData, { rejectWithValue, dispatch }) => {
     try {
-      const response = await api.post('/prompts', promptData);
+      // Log the data being sent
+      console.log('🔍 Creating prompt with data:', JSON.stringify(promptData, null, 2));
+      
+      // Check for required fields
+      if (!promptData.title?.trim() || !promptData.content?.trim() || !promptData.categoryId) {
+        console.error('❌ Missing required fields in thunk:', {
+          title: Boolean(promptData.title?.trim()),
+          content: Boolean(promptData.content?.trim()),
+          categoryId: Boolean(promptData.categoryId),
+        });
+        throw new Error('Title, content, and categoryId are required');
+      }
+      
+      // Format the data properly to ensure consistency
+      const formattedData = {
+        title: promptData.title.trim(),
+        content: promptData.content.trim(),
+        categoryId: promptData.categoryId,
+        description: promptData.description ? promptData.description.trim() : '',
+        tags: promptData.tags || []
+      };
+      
+      console.log('🔍 Sending formatted prompt data:', formattedData);
+      
+      const response = await api.post('/prompts', formattedData);
       
       // Handle nested response structure
       let newPrompt;
@@ -155,11 +216,37 @@ export const createPrompt = createAsyncThunk(
       }
       
       toast.success('Prompt created successfully');
+      
+      // Refresh the prompts list to include the new prompt
+      dispatch(fetchPrompts());
+      
       return newPrompt;
     } catch (error: unknown) {
-      const message = getErrorMessage(error);
-      toast.error(message);
-      return rejectWithValue(message);
+      // Enhanced error handling
+      let errorMessage = 'Failed to create prompt';
+      
+      if (axios.isAxiosError(error)) {
+        // Extract detailed error message from API response
+        const axiosError = error as AxiosError<ApiError>;
+        
+        if (axiosError.response?.data) {
+          // Try to extract the message from various response formats
+          if (typeof axiosError.response.data === 'string') {
+            errorMessage = axiosError.response.data;
+          } else if (axiosError.response.data.message) {
+            errorMessage = axiosError.response.data.message;
+          } else if ((axiosError.response.data as any).error) {
+            errorMessage = (axiosError.response.data as any).error;
+          }
+        }
+        
+        console.error('❌ Create prompt error:', errorMessage, axiosError.response?.data);
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      
+      toast.error(errorMessage);
+      return rejectWithValue(errorMessage);
     }
   }
 );
