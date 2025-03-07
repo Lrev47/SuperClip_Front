@@ -53,128 +53,99 @@ const setToken = async (token: string | null | undefined): Promise<void> => {
     if (isElectron()) {
       console.log('🔑 Setting token in Electron storage');
       
-      // Additional debug logging
-      console.log('🔧 isElectron() reported:', true);
-      console.log('🔧 window.electron exists:', Boolean(window.electron));
-      console.log('🔧 window.electron methods:', Object.keys(window.electron).join(', '));
-      
-      // Check if the setAuthToken method is available
-      if (typeof window.electron.setAuthToken !== 'function') {
-        console.error('❌ window.electron.setAuthToken is not a function!');
-        // Fallback to localStorage
-        console.log('🔧 Falling back to localStorage');
-        localStorage.setItem('auth_token', token);
-        return;
-      }
-      
+      // Try to store token in Electron
       try {
         const result = await window.electron.setAuthToken(token);
-        console.log('🔑 Electron setAuthToken result:', result);
-      } catch (electronError) {
-        console.error('❌ Error in window.electron.setAuthToken:', electronError);
+        console.log('🔑 Electron token storage result:', result);
+        
+        // Also store in localStorage as backup
+        localStorage.setItem('auth_token', token);
+        console.log('🔑 Also stored token in localStorage for backup');
+      } catch (error) {
+        console.error('❌ Failed to set token in Electron:', error);
+        
         // Fallback to localStorage
         localStorage.setItem('auth_token', token);
+        console.log('🔑 Fallback: Stored token in localStorage');
       }
     } else {
-      console.log('🔑 Setting token in localStorage');
+      // Browser mode
       localStorage.setItem('auth_token', token);
-    }
-    
-    // Verify token was saved
-    const savedToken = await getToken();
-    if (savedToken) {
-      console.log('✅ Token verification after save:', savedToken.substring(0, 15) + '...');
-    } else {
-      console.error('❌ Failed to save token - verification returned null/undefined');
-      // Try saving to localStorage as a backup
-      if (isElectron()) {
-        console.log('🔧 Saving to localStorage as backup');
-        localStorage.setItem('auth_token', token);
-      }
+      console.log('🔑 Stored token in localStorage (browser mode)');
     }
   } catch (error) {
     console.error('❌ Error setting token:', error);
-    // Last resort fallback
-    try {
-      localStorage.setItem('auth_token', token);
-      console.log('🔧 Saved to localStorage as last resort');
-    } catch (localStorageError) {
-      console.error('❌ Failed to save to localStorage:', localStorageError);
-    }
   }
 };
 
 const getToken = async (): Promise<string | null> => {
   try {
-    let token = null;
-    
     if (isElectron()) {
       console.log('🔑 Getting token from Electron');
-      try {
-        token = await window.electron.getAuthToken();
-        console.log('🔑 Got token from Electron:', token ? token.substring(0, 15) + '...' : 'No token');
-      } catch (electronError) {
-        console.error('❌ Error getting token from Electron:', electronError);
-      }
       
-      // Fallback to localStorage if no token in Electron store
-      if (!token) {
-        const localToken = localStorage.getItem('auth_token');
-        if (localToken) {
-          console.log('🔑 Fallback: Got token from localStorage:', localToken.substring(0, 15) + '...');
-          
-          // Save it back to electron store for next time
-          try {
-            console.log('🔄 Migrating token from localStorage to Electron store');
-            await window.electron.setAuthToken(localToken);
-            token = localToken;
-          } catch (migrationError) {
-            console.error('❌ Failed to migrate token to Electron store:', migrationError);
-            // But still use the localStorage token
-            token = localToken;
+      try {
+        // Try to get token from Electron
+        const token = await window.electron.getAuthToken();
+        console.log('🔑 Got token from Electron:', token ? 'Token exists' : 'No token');
+        
+        // If no token in Electron, check localStorage
+        if (!token) {
+          const localToken = localStorage.getItem('auth_token');
+          if (localToken) {
+            console.log('🔑 No token in Electron, but found in localStorage');
+            
+            // Try to save it to Electron for future use
+            try {
+              await window.electron.setAuthToken(localToken);
+              console.log('🔑 Synced localStorage token to Electron');
+            } catch (e) {
+              console.error('❌ Failed to sync token to Electron:', e);
+            }
+            
+            return localToken;
           }
         }
+        
+        return token;
+      } catch (error) {
+        console.error('❌ Error getting token from Electron:', error);
+        
+        // Fallback to localStorage
+        const localToken = localStorage.getItem('auth_token');
+        console.log('🔑 Fallback: Using token from localStorage:', localToken ? 'Token exists' : 'No token');
+        return localToken;
       }
     } else {
-      console.log('🔑 Getting token from localStorage');
-      token = localStorage.getItem('auth_token');
-      console.log('🔑 Got token from localStorage:', token ? token.substring(0, 15) + '...' : 'No token');
+      // Browser mode
+      const token = localStorage.getItem('auth_token');
+      console.log('🔑 Getting token from localStorage (browser mode):', token ? 'Token exists' : 'No token');
+      return token;
     }
-    
-    return token;
   } catch (error) {
     console.error('❌ Error getting token:', error);
-    
-    // Last resort: try localStorage directly
-    try {
-      const localToken = localStorage.getItem('auth_token');
-      console.log('🔧 Last resort: Checking localStorage:', localToken ? 'Found token' : 'No token');
-      return localToken;
-    } catch (localStorageError) {
-      console.error('❌ Failed to access localStorage:', localStorageError);
-      return null;
-    }
+    return null;
   }
 };
 
 const clearToken = async (): Promise<void> => {
+  console.log('🔑 Clearing auth token');
+  
   try {
-    console.log('🔑 Clearing auth token');
     if (isElectron()) {
       console.log('🔑 Clearing token from Electron');
-      await window.electron.clearAuthToken();
-    } else {
-      console.log('🔑 Clearing token from localStorage');
-      localStorage.removeItem('auth_token');
+      
+      try {
+        await window.electron.clearAuthToken();
+        console.log('🔑 Token cleared from Electron');
+      } catch (error) {
+        console.error('❌ Error clearing token from Electron:', error);
+      }
     }
     
-    // Verify token was cleared
-    const token = await getToken();
-    if (token) {
-      console.warn('⚠️ Token not cleared properly:', token.substring(0, 15) + '...');
-    } else {
-      console.log('✅ Token cleared successfully');
-    }
+    // Always clear from localStorage too, as a backup
+    localStorage.removeItem('auth_token');
+    console.log('🔑 Token cleared from localStorage');
+    console.log('✅ Token cleared successfully');
   } catch (error) {
     console.error('❌ Error clearing token:', error);
   }
@@ -208,112 +179,18 @@ export const login = createAsyncThunk(
       
       // Use direct axios for login to avoid interceptor issues
       const response = await axios.post(`${API_URL}/auth/login`, credentials);
+      console.log('🔍 Login response:', response.data);
       
-      // Log entire response structure for debugging
-      console.log('🔍 Login response status:', response.status);
-      console.log('🔍 Login response data:', JSON.stringify(response.data, null, 2));
+      // The API returns data in a nested structure: { status: 'success', data: { user: {...}, token: '...' } }
+      const token = response.data?.data?.token;
       
-      // Check response structure
-      if (!response.data) {
-        console.error('❌ Login response missing data object');
-        throw new Error('Invalid login response structure');
-      }
-      
-      // Try different possible token locations, including nested structures
-      let token = null;
-      
-      // Check for nested data structure (response.data.data.token)
-      if (response.data.data && response.data.data.token) {
-        token = response.data.data.token;
-        console.log('🔑 Found token in nested structure: response.data.data.token');
-      } else {
-        // Try standard locations
-        const possibleTokenKeys = ['token', 'accessToken', 'access_token', 'auth_token', 'jwt', 'authToken'];
-        
-        for (const key of possibleTokenKeys) {
-          if (response.data[key]) {
-            token = response.data[key];
-            console.log(`🔑 Found token in response.data.${key}`);
-            break;
-          }
-        }
-      }
-      
-      // If no token found yet, try looking for JWT-like strings
       if (!token) {
-        const jwtPattern = /^ey[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}$/;
-        
-        // Check for JWT pattern in nested structure
-        if (response.data.data) {
-          const nestedProps = Object.entries(response.data.data)
-            .filter(([_, value]) => typeof value === 'string' && jwtPattern.test(value as string));
-            
-          if (nestedProps.length > 0) {
-            const [key, value] = nestedProps[0];
-            token = value as string;
-            console.log(`🔑 Using JWT-like string from response.data.data.${key}`);
-          }
-        }
-        
-        // Check at root level too
-        if (!token) {
-          const rootProps = Object.entries(response.data)
-            .filter(([_, value]) => typeof value === 'string' && jwtPattern.test(value as string));
-            
-          if (rootProps.length > 0) {
-            const [key, value] = rootProps[0];
-            token = value as string;
-            console.log(`🔑 Using JWT-like string from response.data.${key}`);
-          }
-        }
+        console.error('❌ No token received in login response:', response.data);
+        throw new Error('No authentication token received from server');
       }
-      
-      console.log('🔓 Login successful, token found:', token ? token.substring(0, 15) + '...' : 'no token');
       
       // Store token in secure storage
-      if (!token) {
-        console.log('🔍 Checking nested data structure...');
-        console.log('- Response has nested data:', response.data.data ? 'Yes' : 'No');
-        if (response.data.data) {
-          console.log('- Nested data keys:', Object.keys(response.data.data));
-        }
-        
-        console.error('❌ No token received from login response!');
-        throw new Error('No authentication token received');
-      }
-      
-      // Make extra effort to store token
-      try {
-        console.log('🔑 Storing token in secure storage...', token.substring(0, 15) + '...');
-        
-        // Try saving token directly first
-        if (isElectron()) {
-          const result = await window.electron.setAuthToken(token);
-          console.log('🔑 Direct electron token save result:', result);
-        } else {
-          localStorage.setItem('auth_token', token);
-          console.log('🔑 Direct localStorage token save completed');
-        }
-        
-        // Also use our helper
-        await setToken(token);
-        
-        // Double-check token was saved
-        const savedToken = await getToken();
-        if (!savedToken) {
-          console.error('❌ Failed to save token to storage during login!');
-          // Try again with a small delay
-          setTimeout(async () => {
-            console.log('🔄 Retrying token save...');
-            await setToken(token);
-          }, 100);
-        } else {
-          console.log('✅ Token successfully verified in storage:', 
-                    savedToken ? savedToken.substring(0, 15) + '...' : 'missing');
-        }
-      } catch (storageError) {
-        console.error('❌ Error storing token:', storageError);
-      }
+      await setToken(token);
       
       // Decode token to ensure it's valid and log data
       try {
@@ -326,6 +203,7 @@ export const login = createAsyncThunk(
         });
       } catch (decodeError) {
         console.error('❌ Error decoding token after login:', decodeError);
+        // Even if we can't decode for logging, still return the token
       }
       
       toast.success('Login successful');
@@ -348,7 +226,16 @@ export const register = createAsyncThunk(
       
       // Use direct axios for register to avoid interceptor issues
       const response = await axios.post(`${API_URL}/auth/register`, credentials);
-      const token = response.data.token;
+      console.log('🔍 Registration response:', response.data);
+      
+      // The API returns data in a nested structure: { status: 'success', data: { user: {...}, token: '...' } }
+      // Extract token from the correct location in the response
+      const token = response.data?.data?.token;
+      
+      if (!token) {
+        console.error('❌ No token received in registration response:', response.data);
+        throw new Error('No authentication token received from server');
+      }
       
       // Store token in secure storage
       await setToken(token);
@@ -364,6 +251,7 @@ export const register = createAsyncThunk(
         });
       } catch (decodeError) {
         console.error('❌ Error decoding token after registration:', decodeError);
+        // Even if we can't decode for logging, still return the token
       }
       
       toast.success('Registration successful');
@@ -396,42 +284,62 @@ export const checkAuth = createAsyncThunk(
   'auth/checkAuth',
   async (_, { rejectWithValue }) => {
     try {
-      console.log('🔐 Checking authentication...');
+      console.log('🔍 Checking auth state...');
+      
       // Get token from secure storage
       const token = await getToken();
+      console.log('🔑 Token from storage:', token ? token.substring(0, 15) + '...' : 'No token');
       
-      if (token) {
+      if (!token) {
+        console.log('🔑 No token found, user is not authenticated');
+        return null;
+      }
+      
+      // Verify token expiry by decoding
+      try {
+        const decoded = jwtDecode<JwtPayload>(token);
+        const currentTime = Date.now() / 1000;
+        
+        console.log('🔓 Token expiry:', new Date(decoded.exp * 1000).toISOString());
+        console.log('🔓 Current time:', new Date(currentTime * 1000).toISOString());
+        
+        if (decoded.exp < currentTime) {
+          console.log('🔓 Token expired, clearing...');
+          await clearToken();
+          return null;
+        }
+        
+        console.log('🔓 Token valid, user is authenticated');
+        
+        // Use the token to fetch current user data
         try {
-          // Verify token is valid (not expired)
-          const decoded = jwtDecode<JwtPayload>(token);
-          console.log('🔓 Token decoded:', decoded);
+          // Make a request to /auth/me with the token
+          const response = await api.get('/auth/me');
+          console.log('🔍 User data response:', response.data);
           
-          const currentTime = Date.now() / 1000;
+          // If we get here, the token is valid and the user is authenticated
+          return token;
+        } catch (apiError) {
+          console.error('❌ Error fetching user data:', apiError);
           
-          if (decoded.exp < currentTime) {
-            // Token expired
-            console.log('⏰ Token expired, clearing');
+          // If we get a 401, the token is invalid
+          if (axios.isAxiosError(apiError) && apiError.response?.status === 401) {
+            console.log('🔓 Invalid token, clearing...');
             await clearToken();
             return null;
           }
           
-          console.log('✅ Token is valid');
+          // For other errors, we'll assume the token is still valid
           return token;
-        } catch (jwtError) {
-          console.error('❌ Error decoding JWT:', jwtError);
-          // Invalid token format
-          await clearToken();
-          return null;
         }
-      } else {
-        console.log('❌ No token found');
+      } catch (decodeError) {
+        console.error('❌ Error decoding JWT', decodeError);
+        await clearToken();
+        return null;
       }
-      
-      return null;
-    } catch (error: unknown) {
-      const message = getErrorMessage(error);
-      console.error('🔒 Auth check error:', message);
-      return rejectWithValue(message);
+    } catch (error) {
+      console.error('❌ Error checking auth:', error);
+      return rejectWithValue('Failed to check authentication status');
     }
   }
 );

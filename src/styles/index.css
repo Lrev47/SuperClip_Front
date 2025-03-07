@@ -60,6 +60,20 @@
     height: calc(100% - 32px); /* Subtract title bar height */
   }
   
+  /* Auth layout specific styles */
+  .auth-layout-container {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 100% !important;
+    height: 100% !important;
+  }
+
+  .auth-form-container {
+    margin: 0 auto !important;
+    max-width: 28rem !important;
+  }
+  
   /* Main layout */
   .main-layout {
     display: flex;

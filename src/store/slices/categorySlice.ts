@@ -96,7 +96,7 @@ export const fetchCategories = createAsyncThunk(
 
 export const createCategory = createAsyncThunk(
   'categories/createCategory',
-  async (categoryData: CreateCategoryData, { rejectWithValue, dispatch }) => {
+  async (categoryData: CreateCategoryData, { rejectWithValue }) => {
     try {
       // Log the data being sent
       console.log('🔍 Creating category with data:', JSON.stringify(categoryData, null, 2));
@@ -111,27 +111,45 @@ export const createCategory = createAsyncThunk(
         name: categoryData.name.trim(),
         description: categoryData.description ? categoryData.description.trim() : '',
         color: categoryData.color || '#6366F1', // Default color if not provided
+        parentId: categoryData.parentId || null, // Include parentId in the request
       };
       
-      console.log('🔍 Sending formatted category data:', formattedData);
+      console.log('🔍 Sending formatted category data with parentId:', formattedData.parentId);
+      console.log('🔍 Full category data:', formattedData);
       
       // Using our configured API instance with auth interceptors
       const response = await api.post('/categories', formattedData);
       
-      // Handle nested response structure
-      let newCategory;
-      if (response.data && response.data.data) {
-        newCategory = response.data.data;
+      // Log the response to help with debugging
+      console.log('🔍 Category created response:', JSON.stringify(response.data, null, 2));
+      
+      // Handle nested response structure - the backend returns { category: { id, ... } }
+      let categoryObj;
+      if (response.data && response.data.category) {
+        // Response has the expected nested structure { category: { ... } }
+        categoryObj = response.data.category;
+      } else if (response.data && response.data.data && response.data.data.category) {
+        // Response has double-nested structure { data: { category: { ... } } }
+        categoryObj = response.data.data.category;
+      } else if (response.data && response.data.id) {
+        // Response has the category directly at the top level
+        categoryObj = response.data;
+      } else if (response.data && response.data.data && response.data.data.id) {
+        // Response has category in data property
+        categoryObj = response.data.data;
       } else {
-        newCategory = response.data;
+        console.error('❌ Unexpected response structure:', response.data);
+        throw new Error('Unexpected API response structure');
+      }
+      
+      if (!categoryObj || !categoryObj.id) {
+        console.error('❌ Created category is missing ID', response.data);
+        throw new Error('Failed to get ID for new category');
       }
       
       toast.success('Category created successfully');
       
-      // Refresh the categories list
-      dispatch(fetchCategories());
-      
-      return newCategory;
+      return categoryObj;
     } catch (error: unknown) {
       // Enhanced error handling
       let errorMessage = 'Failed to create category';

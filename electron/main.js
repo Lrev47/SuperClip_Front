@@ -67,6 +67,13 @@ let windowBounds = null; // Store window bounds before maximizing
 
 // Create the main application window
 function createWindow() {
+  // Get primary display dimensions
+  const { width: screenWidth, height: screenHeight } = require('electron').screen.getPrimaryDisplay().workAreaSize;
+  
+  // Debug output screen dimensions
+  console.log('Primary display work area:', require('electron').screen.getPrimaryDisplay().workArea);
+  console.log('Primary display bounds:', require('electron').screen.getPrimaryDisplay().bounds);
+  
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -85,7 +92,8 @@ function createWindow() {
     frame: false,
     useContentSize: true, // Use content size for better sizing
     center: true, // Center the window
-    thickFrame: false, // Disable thick frame for better precision
+    // IMPORTANT: Enable Windows snapping support natively
+    thickFrame: true, // Use Windows thick frame for native snapping
     autoHideMenuBar: true, // Hide menu bar for cleaner look
   });
 
@@ -105,6 +113,283 @@ function createWindow() {
   // Show window when it's ready to prevent flickering
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
+  });
+
+  // Add window snapping functionality
+  let isMoving = false;
+  let moveTimeout = null;
+  let isSnapped = false;
+  let snapPosition = null;
+  let previousBounds = null;
+  let snapStartTime = 0;
+
+  // Get all available displays for multi-monitor support
+  const getAllDisplays = () => {
+    return require('electron').screen.getAllDisplays();
+  };
+
+  // Find which display the window is currently on
+  const getCurrentDisplay = (winBounds) => {
+    const center = {
+      x: winBounds.x + winBounds.width / 2,
+      y: winBounds.y + winBounds.height / 2
+    };
+    
+    const displays = getAllDisplays();
+    return displays.find(display => {
+      const bounds = display.bounds;
+      return center.x >= bounds.x && center.x < bounds.x + bounds.width &&
+             center.y >= bounds.y && center.y < bounds.y + bounds.height;
+    }) || require('electron').screen.getPrimaryDisplay();
+  };
+
+  // Add a direct method to snap windows using the Windows-native approach
+  const snapWindowToSide = (side) => {
+    console.log(`Snapping window to ${side} using keyboard shortcut method`);
+    
+    const currentDisplay = getCurrentDisplay(mainWindow.getBounds());
+    const workArea = currentDisplay.workArea;
+    
+    // Use direct setBounds for more control and consistency across platforms
+    if (side === 'left') {
+      mainWindow.setBounds({
+        x: workArea.x,
+        y: workArea.y,
+        width: Math.floor(workArea.width / 2),
+        height: workArea.height
+      });
+    } else if (side === 'right') {
+      mainWindow.setBounds({
+        x: workArea.x + Math.floor(workArea.width / 2),
+        y: workArea.y, 
+        width: Math.floor(workArea.width / 2),
+        height: workArea.height
+      });
+    } else if (side === 'maximize') {
+      mainWindow.maximize();
+    }
+    
+    // Directly set the size after position to prevent any issues
+    if (side === 'left' || side === 'right') {
+      setTimeout(() => {
+        if (side === 'left') {
+          mainWindow.setPosition(workArea.x, workArea.y);
+        } else if (side === 'right') {
+          mainWindow.setPosition(workArea.x + Math.floor(workArea.width / 2), workArea.y);
+        }
+        
+        mainWindow.setSize(Math.floor(workArea.width / 2), workArea.height);
+      }, 50);
+    }
+  };
+
+  // Add IPC handlers for side snapping
+  ipcMain.handle('snap-window-left', () => {
+    snapWindowToSide('left');
+    return true;
+  });
+  
+  ipcMain.handle('snap-window-right', () => {
+    snapWindowToSide('right');
+    return true;
+  });
+  
+  ipcMain.handle('snap-window-maximize', () => {
+    snapWindowToSide('maximize');
+    return true;
+  });
+
+  // Listen for window move events
+  mainWindow.on('move', () => {
+    // If we're already tracking movement, clear the previous timeout
+    if (moveTimeout) {
+      clearTimeout(moveTimeout);
+    }
+    
+    // Mark that we're moving
+    if (!isMoving) {
+      isMoving = true;
+      snapStartTime = Date.now();
+    }
+    
+    // Check window position for snapping
+    const currentPosition = mainWindow.getBounds();
+    
+    // Get the current display the window is on
+    const currentDisplay = getCurrentDisplay(currentPosition);
+    const workArea = currentDisplay.workArea;
+    
+    // Calculate snap dimensions for the current display
+    const snapThreshold = 20; // Distance in pixels to trigger snap
+    const snapWidth = Math.floor(workArea.width / 2);
+    const snapHeight = workArea.height;
+    const quarterWidth = Math.floor(workArea.width / 2);
+    const quarterHeight = Math.floor(workArea.height / 2);
+    
+    // Calculate relative position to the current display
+    const relativeX = currentPosition.x - workArea.x;
+    const relativeY = currentPosition.y - workArea.y;
+    const rightEdge = workArea.x + workArea.width;
+    const bottomEdge = workArea.y + workArea.height;
+    
+    // IMPORTANT: Debug output for display metrics
+    console.log('Current display work area:', workArea);
+    console.log('Current bounds:', currentPosition);
+    
+    // Set timeout to allow for detecting end of move
+    moveTimeout = setTimeout(() => {
+      // How long the window has been moving
+      const moveDuration = Date.now() - snapStartTime;
+      
+      // Only consider snapping if we've been moving for a short time and then paused
+      // This prevents accidental snaps during normal movement
+      if (moveDuration > 200) {
+        // Don't snap if we're just moving across the screen
+        isMoving = false;
+        return;
+      }
+
+      // Check if we're near any edges of the current display
+      const nearLeftEdge = relativeX < snapThreshold;
+      const nearRightEdge = (rightEdge - (currentPosition.x + currentPosition.width)) < snapThreshold;
+      const nearTopEdge = relativeY < snapThreshold;
+      const nearBottomEdge = (bottomEdge - (currentPosition.y + currentPosition.height)) < snapThreshold;
+      
+      // Check for corner snapping first (when clearly in a corner region)
+      // We add a stricter threshold for corners to make side-snapping easier
+      const cornerThreshold = snapThreshold * 0.7; // Make corner detection more precise
+      const strictNearTopEdge = relativeY < cornerThreshold;
+      const strictNearBottomEdge = (bottomEdge - (currentPosition.y + currentPosition.height)) < cornerThreshold;
+      
+      const isTopLeftCorner = nearLeftEdge && strictNearTopEdge;
+      const isTopRightCorner = nearRightEdge && strictNearTopEdge;
+      const isBottomLeftCorner = nearLeftEdge && strictNearBottomEdge;
+      const isBottomRightCorner = nearRightEdge && strictNearBottomEdge;
+      
+      // Only snap if we're moving
+      if (!isMoving) {
+        return;
+      }
+      
+      // Calculate half/full screen dimensions
+      // Full height of the current display's work area
+      const fullHeight = workArea.height;
+      // Half width of the current display's work area
+      const halfWidth = Math.floor(workArea.width / 2);
+      
+      // Explicitly log the dimensions that will be used for side snapping
+      console.log('Side snapping dimensions:', {
+        halfWidth,
+        fullHeight,
+        workAreaHeight: workArea.height,
+        workAreaY: workArea.y
+      });
+      
+      // Define helper function to log and perform snap
+      const performSnap = (position, bounds) => {
+        console.log(`Snapping to ${position} on display:`, currentDisplay.id);
+        console.log('Snap bounds:', bounds);
+        previousBounds = { ...currentPosition };
+        
+        // First set the position
+        mainWindow.setBounds(bounds);
+        
+        // Force a specific size and position to ensure it applies correctly
+        if (position === 'left' || position === 'right') {
+          console.log('Forcing window resize for side snapping');
+          // Wait a tiny bit for the window manager to process the initial sizing
+          setTimeout(() => {
+            // Set exact width and height directly, starting with position to avoid jumps
+            mainWindow.setPosition(bounds.x, bounds.y);
+            mainWindow.setSize(bounds.width, bounds.height);
+            
+            // Double-check the final bounds
+            setTimeout(() => {
+              const finalBounds = mainWindow.getBounds();
+              console.log('Final window bounds:', finalBounds);
+            }, 50);
+          }, 10);
+        }
+        
+        isSnapped = true;
+        snapPosition = position;
+      };
+      
+      // Top-left corner snap
+      if (isTopLeftCorner) {
+        performSnap('corner-top-left', {
+          x: workArea.x,
+          y: workArea.y,
+          width: quarterWidth,
+          height: quarterHeight
+        });
+      }
+      // Top-right corner snap
+      else if (isTopRightCorner) {
+        performSnap('corner-top-right', {
+          x: workArea.x + workArea.width - quarterWidth,
+          y: workArea.y,
+          width: quarterWidth,
+          height: quarterHeight
+        });
+      }
+      // Bottom-left corner snap
+      else if (isBottomLeftCorner) {
+        performSnap('corner-bottom-left', {
+          x: workArea.x,
+          y: workArea.y + workArea.height - quarterHeight,
+          width: quarterWidth,
+          height: quarterHeight
+        });
+      }
+      // Bottom-right corner snap
+      else if (isBottomRightCorner) {
+        performSnap('corner-bottom-right', {
+          x: workArea.x + workArea.width - quarterWidth,
+          y: workArea.y + workArea.height - quarterHeight,
+          width: quarterWidth,
+          height: quarterHeight
+        });
+      }
+      // Top edge snap (maximize)
+      else if (nearTopEdge) {
+        windowBounds = { ...currentPosition };
+        previousBounds = { ...currentPosition };
+        performSnap('top', {
+          x: workArea.x,
+          y: workArea.y,
+          width: workArea.width,
+          height: workArea.height
+        });
+      }
+      // Left edge snap - FULL HEIGHT, half width
+      else if (nearLeftEdge) {
+        // Create the bounds directly using the work area values
+        const leftSnapBounds = {
+          x: workArea.x,
+          y: workArea.y,
+          width: halfWidth,
+          height: workArea.height  // Use workArea.height directly
+        };
+        console.log('Left snap bounds:', leftSnapBounds);
+        performSnap('left', leftSnapBounds);
+      }
+      // Right edge snap - FULL HEIGHT, half width
+      else if (nearRightEdge) {
+        // Create the bounds directly using the work area values
+        const rightSnapBounds = {
+          x: workArea.x + workArea.width - halfWidth,
+          y: workArea.y,
+          width: halfWidth,
+          height: workArea.height  // Use workArea.height directly
+        };
+        console.log('Right snap bounds:', rightSnapBounds);
+        performSnap('right', rightSnapBounds);
+      }
+      
+      // Reset the moving flag
+      isMoving = false;
+    }, 150); // Small delay to check if window has stopped at an edge
   });
 
   // Set up window state change listeners
@@ -458,4 +743,13 @@ ipcMain.handle('is-window-maximized', (event) => {
 // Handle check if window is in fullscreen
 ipcMain.handle('is-full-screen', (event) => {
   return mainWindow ? mainWindow.isFullScreen() : false;
+});
+
+// Double-click on title bar to maximize/restore
+ipcMain.on('title-bar-double-click', () => {
+  if (mainWindow.isMaximized()) {
+    mainWindow.unmaximize();
+  } else {
+    mainWindow.maximize();
+  }
 }); 

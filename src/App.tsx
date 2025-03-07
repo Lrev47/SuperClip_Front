@@ -122,6 +122,7 @@ const App = () => {
               <Route path="/prompts" element={<PromptsPage />} />
               <Route path="/prompts/:id" element={<PromptDetailPage />} />
               <Route path="/categories" element={<CategoriesPage />} />
+              <Route path="/categories/:id" element={<CategoriesPage />} />
               <Route path="/generator" element={<GeneratorPage />} />
               <Route path="/settings" element={<SettingsPage />} />
             </Route>

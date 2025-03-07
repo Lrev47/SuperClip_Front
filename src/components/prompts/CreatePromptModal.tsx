@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import { useAppDispatch, useAppSelector } from '@/hooks/redux';
@@ -7,6 +7,7 @@ import { createCategory } from '@/store/slices/categorySlice';
 import { closeModal } from '@/store/slices/uiSlice';
 import Modal from '@/components/ui/Modal';
 import { PlusIcon } from '@heroicons/react/24/outline';
+import { toast } from 'react-hot-toast';
 
 // Validation schema - conditionally apply categoryId validation
 const getValidationSchema = (isCreatingCategory: boolean) => {
@@ -48,9 +49,24 @@ const CreatePromptModal: React.FC = () => {
   const [newCategory, setNewCategory] = useState({ 
     name: '', 
     description: '', 
-    color: '#6366F1' // Default indigo color
+    color: '#6366F1', // Default indigo color
+    parentId: ''
   });
   const [categoryError, setCategoryError] = useState('');
+  
+  // State for two-level category selection
+  const [selectedParentCategory, setSelectedParentCategory] = useState<string>('');
+  const [availableSubcategories, setAvailableSubcategories] = useState<any[]>([]);
+
+  // Update subcategories when parent category changes
+  useEffect(() => {
+    if (selectedParentCategory) {
+      const subcats = categories.filter(cat => cat.parentId === selectedParentCategory);
+      setAvailableSubcategories(subcats);
+    } else {
+      setAvailableSubcategories([]);
+    }
+  }, [selectedParentCategory, categories]);
 
   const formik = useFormik({
     initialValues: {
@@ -83,6 +99,8 @@ const CreatePromptModal: React.FC = () => {
           return;
         }
         
+        let categoryId = values.categoryId;
+        
         // If we're creating a new category, save it first
         if (isCreatingCategory) {
           console.log('📂 Creating new category:', newCategory);
@@ -95,19 +113,45 @@ const CreatePromptModal: React.FC = () => {
           }
           
           // Create the category
-          console.log('📂 Dispatching createCategory');
-          const resultAction = await dispatch(createCategory({
-            name: newCategory.name,
-            description: newCategory.description,
-            color: newCategory.color
-          })).unwrap();
-          
-          // Get the new category ID
-          const newCategoryId = resultAction.id;
-          console.log('📂 New category created with ID:', newCategoryId);
-          
-          // Use the new category ID for the prompt
-          values.categoryId = newCategoryId;
+          try {
+            // Create the category object to send to the API
+            const categoryData = {
+              name: newCategory.name.trim(),
+              description: newCategory.description.trim(),
+              color: newCategory.color,
+              parentId: newCategory.parentId || undefined
+            };
+            
+            console.log('📂 Creating category with data:', categoryData);
+            
+            const categoryResult = await dispatch(createCategory(categoryData));
+            
+            if (categoryResult.meta.requestStatus === 'fulfilled' && categoryResult.payload) {
+              // Extract the ID from the payload
+              console.log('📂 Category creation result:', categoryResult.payload);
+              categoryId = categoryResult.payload.id;
+              console.log('📂 New category created with ID:', categoryId);
+              
+              if (!categoryId) {
+                console.error('❌ Failed to get new category ID from response');
+                throw new Error('Failed to get ID from new category');
+              }
+            } else {
+              console.error('❌ Failed to create category:', 
+                categoryResult.meta.requestStatus === 'rejected' ? 'Request rejected' : 'Unknown error');
+              throw new Error('Failed to create category');
+            }
+          } catch (categoryError) {
+            console.error('❌ Error creating category:', categoryError);
+            toast.error('Failed to create category');
+            return;
+          }
+        }
+        
+        // If no subcategory was selected but a parent category was, use the parent categoryId
+        if (!categoryId && selectedParentCategory) {
+          categoryId = selectedParentCategory;
+          console.log('📂 Using parent category ID as no subcategory was selected:', categoryId);
         }
         
         // Create a properly formatted data object for the API
@@ -115,18 +159,31 @@ const CreatePromptModal: React.FC = () => {
           title: values.title.trim(),
           content: values.content.trim(),
           description: values.description ? values.description.trim() : '',  // Handle undefined
-          categoryId: values.categoryId,
+          categoryId: categoryId, // Use the categoryId from existing selection or newly created category
           tags: values.tags || []
         };
         
+        // Validate that we have a categoryId
+        if (!promptData.categoryId) {
+          console.error('❌ Missing categoryId for prompt creation');
+          toast.error('Missing category ID. Please select or create a category.');
+          return;
+        }
+        
         // Create the prompt
         console.log('📝 Dispatching createPrompt with values:', promptData);
-        const result = await dispatch(createPrompt(promptData)).unwrap();
-        console.log('📝 Prompt created successfully:', result);
-        
-        handleClose();
+        try {
+          const result = await dispatch(createPrompt(promptData)).unwrap();
+          console.log('📝 Prompt created successfully:', result);
+          toast.success('Prompt created successfully');
+          handleClose();
+        } catch (error: unknown) {
+          console.error('❌ Error creating prompt:', error);
+          toast.error('Failed to create prompt: ' + (error instanceof Error ? error.message : 'Unknown error'));
+        }
       } catch (error) {
-        console.error('❌ Error creating prompt:', error);
+        console.error('❌ Error in form submission:', error);
+        toast.error('An unexpected error occurred');
       }
     },
   });
@@ -135,26 +192,38 @@ const CreatePromptModal: React.FC = () => {
     dispatch(closeModal('createPrompt'));
     formik.resetForm();
     setIsCreatingCategory(false);
-    setNewCategory({ name: '', description: '', color: '#6366F1' });
+    setNewCategory({ name: '', description: '', color: '#6366F1', parentId: '' });
     setCategoryError('');
+    setSelectedParentCategory('');
+    setAvailableSubcategories([]);
   };
 
-  // Handle category selection change
-  const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  // Handle parent category selection change
+  const handleParentCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const value = e.target.value;
     
     if (value === NEW_CATEGORY_OPTION) {
       setIsCreatingCategory(true);
-      // When switching to create category mode, reset the categoryId field
       formik.setFieldValue('categoryId', '');
-      // Re-validate the form with the new validation schema
-      formik.validateForm();
+      setSelectedParentCategory('');
     } else {
       setIsCreatingCategory(false);
-      formik.setFieldValue('categoryId', value);
+      setSelectedParentCategory(value);
+      
+      // Clear the subcategory selection when parent changes
+      formik.setFieldValue('categoryId', '');
     }
   };
+  
+  // Handle subcategory selection change
+  const handleSubcategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const value = e.target.value;
+    formik.setFieldValue('categoryId', value);
+  };
 
+  // Get top-level categories (no parentId)
+  const topLevelCategories = categories.filter(category => !category.parentId);
+  
   // Manual form submission helper
   const handleManualSubmit = () => {
     console.log('🔨 Manual submit triggered');
@@ -167,7 +236,8 @@ const CreatePromptModal: React.FC = () => {
     const errors: any = {};
     if (!values.title.trim()) errors.title = 'Title is required';
     if (!values.content.trim()) errors.content = 'Content is required';
-    if (!values.categoryId && !isCreatingCategory) errors.categoryId = 'Category is required';
+    if (!values.categoryId && !isCreatingCategory && !selectedParentCategory) 
+      errors.categoryId = 'Category is required';
     
     console.log('🔨 Manual validation errors:', errors);
     
@@ -197,20 +267,16 @@ const CreatePromptModal: React.FC = () => {
     isCreatingCategory
   });
 
+  // Is modal open
+  const isOpen = modalOpen.createPrompt;
+
   return (
     <Modal
-      isOpen={modalOpen.createPrompt}
+      isOpen={isOpen}
       onClose={handleClose}
       title="Create New Prompt"
-      size="md"
     >
-      <form 
-        onSubmit={(e) => {
-          console.log('📋 Form onSubmit event triggered');
-          formik.handleSubmit(e);
-        }} 
-        className="space-y-4"
-      >
+      <form onSubmit={formik.handleSubmit} className="space-y-4">
         {/* Title field */}
         <div>
           <label htmlFor="title" className="block text-sm font-medium text-gray-300">
@@ -265,136 +331,171 @@ const CreatePromptModal: React.FC = () => {
           />
         </div>
 
-        {/* Category field */}
-        <div>
-          <label htmlFor="categoryId" className="block text-sm font-medium text-gray-300">
-            Category <span className="text-red-500">*</span>
-          </label>
-          
-          {!isCreatingCategory ? (
-            <select
-              id="categoryId"
-              name="categoryId"
-              onChange={handleCategoryChange}
-              onBlur={formik.handleBlur}
-              value={formik.values.categoryId}
-              className="mt-1 block w-full rounded-md bg-dark-600 border-dark-500 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-white"
-            >
-              <option value="">Select a category</option>
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-              <option value={NEW_CATEGORY_OPTION}>✨ Create new category...</option>
-            </select>
-          ) : (
-            <div className="space-y-3 mt-1 p-3 border border-dark-400 rounded-md bg-dark-700">
-              <h4 className="text-sm font-medium text-primary-400">New Category</h4>
-              
-              {/* New category name */}
+        {/* Category field - Two-level selection */}
+        {!isCreatingCategory ? (
+          <div className="space-y-4">
+            {/* Parent Category Dropdown */}
+            <div>
+              <label htmlFor="parentCategory" className="block text-sm font-medium text-gray-300">
+                Category <span className="text-red-500">*</span>
+              </label>
+              <select
+                id="parentCategory"
+                name="parentCategory"
+                onChange={handleParentCategoryChange}
+                value={selectedParentCategory}
+                className="mt-1 block w-full rounded-md bg-dark-600 border-dark-500 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-white"
+              >
+                <option value="">Select a category</option>
+                {topLevelCategories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+                <option value={NEW_CATEGORY_OPTION}>✨ Create new category...</option>
+              </select>
+              {!selectedParentCategory && !formik.values.categoryId && formik.touched.categoryId && formik.errors.categoryId && (
+                <div className="mt-1 text-xs text-red-500">{formik.errors.categoryId}</div>
+              )}
+            </div>
+            
+            {/* Subcategory Dropdown - Only show if parent category is selected */}
+            {selectedParentCategory && (
               <div>
-                <label htmlFor="new-category-name" className="block text-xs text-gray-400">
-                  Name <span className="text-red-500">*</span>
+                <label htmlFor="categoryId" className="block text-sm font-medium text-gray-300">
+                  Subcategory (Optional)
                 </label>
-                <input
-                  id="new-category-name"
-                  type="text"
-                  value={newCategory.name}
-                  onChange={(e) => {
-                    setNewCategory({ ...newCategory, name: e.target.value });
-                    if (e.target.value.trim()) setCategoryError('');
-                  }}
-                  className="mt-1 block w-full rounded-md bg-dark-600 border-dark-500 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-white text-sm"
-                />
-                {categoryError && (
-                  <div className="mt-1 text-xs text-red-500">{categoryError}</div>
-                )}
-              </div>
-              
-              {/* New category description */}
-              <div>
-                <label htmlFor="new-category-description" className="block text-xs text-gray-400">
-                  Description (Optional)
-                </label>
-                <input
-                  id="new-category-description"
-                  type="text"
-                  value={newCategory.description}
-                  onChange={(e) => setNewCategory({ ...newCategory, description: e.target.value })}
-                  className="mt-1 block w-full rounded-md bg-dark-600 border-dark-500 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-white text-sm"
-                />
-              </div>
-              
-              {/* New category color */}
-              <div>
-                <label htmlFor="new-category-color" className="block text-xs text-gray-400">
-                  Color
-                </label>
-                <div className="flex items-center mt-1">
-                  <input
-                    id="new-category-color"
-                    type="color"
-                    value={newCategory.color}
-                    onChange={(e) => setNewCategory({ ...newCategory, color: e.target.value })}
-                    className="h-8 w-8 rounded-md border-0 bg-transparent p-0"
-                  />
-                  <span className="ml-2 text-xs text-gray-400">{newCategory.color}</span>
-                </div>
-              </div>
-              
-              {/* Back to selection button */}
-              <div>
-                <button
-                  type="button"
-                  onClick={() => setIsCreatingCategory(false)}
-                  className="text-xs text-gray-400 hover:text-primary-400"
+                <select
+                  id="categoryId"
+                  name="categoryId"
+                  onChange={handleSubcategoryChange}
+                  onBlur={formik.handleBlur}
+                  value={formik.values.categoryId}
+                  className="mt-1 block w-full rounded-md bg-dark-600 border-dark-500 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-white"
                 >
-                  ← Back to category selection
-                </button>
+                  <option value="">No subcategory (use main category)</option>
+                  {availableSubcategories.length > 0 ? (
+                    availableSubcategories.map((subcategory) => (
+                      <option key={subcategory.id} value={subcategory.id}>
+                        {subcategory.name}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="" disabled>No subcategories available</option>
+                  )}
+                </select>
+                <p className="mt-1 text-xs text-gray-400">
+                  If no subcategory is selected, the prompt will be assigned to the main category.
+                </p>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-3 mt-1 p-3 border border-dark-400 rounded-md bg-dark-700">
+            <h4 className="text-sm font-medium text-primary-400">New Category</h4>
+              
+            {/* New category name */}
+            <div>
+              <label htmlFor="new-category-name" className="block text-xs text-gray-400">
+                Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="new-category-name"
+                type="text"
+                value={newCategory.name}
+                onChange={(e) => {
+                  setNewCategory({ ...newCategory, name: e.target.value });
+                  if (e.target.value.trim()) setCategoryError('');
+                }}
+                className="mt-1 block w-full rounded-md bg-dark-600 border-dark-500 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-white text-sm"
+              />
+              {categoryError && (
+                <div className="mt-1 text-xs text-red-500">{categoryError}</div>
+              )}
+            </div>
+              
+            {/* New category description */}
+            <div>
+              <label htmlFor="new-category-description" className="block text-xs text-gray-400">
+                Description (Optional)
+              </label>
+              <input
+                id="new-category-description"
+                type="text"
+                value={newCategory.description}
+                onChange={(e) => setNewCategory({ ...newCategory, description: e.target.value })}
+                className="mt-1 block w-full rounded-md bg-dark-600 border-dark-500 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-white text-sm"
+              />
+            </div>
+              
+            {/* New category color */}
+            <div>
+              <label htmlFor="new-category-color" className="block text-xs text-gray-400">
+                Color
+              </label>
+              <div className="flex items-center mt-1">
+                <input
+                  id="new-category-color"
+                  type="color"
+                  value={newCategory.color}
+                  onChange={(e) => setNewCategory({ ...newCategory, color: e.target.value })}
+                  className="h-8 w-8 rounded-md border-0 bg-transparent p-0"
+                />
+                <span className="ml-2 text-xs text-gray-400">{newCategory.color}</span>
               </div>
             </div>
-          )}
-          
-          {formik.touched.categoryId && formik.errors.categoryId && !isCreatingCategory && (
-            <div className="mt-1 text-xs text-red-500">{formik.errors.categoryId}</div>
-          )}
-        </div>
+            
+            {/* Parent category dropdown for new category */}
+            <div>
+              <label htmlFor="new-category-parent" className="block text-xs text-gray-400">
+                Parent Category (Optional)
+              </label>
+              <select
+                id="new-category-parent"
+                value={newCategory.parentId}
+                onChange={(e) => setNewCategory({ ...newCategory, parentId: e.target.value })}
+                className="mt-1 block w-full rounded-md bg-dark-600 border-dark-500 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-white text-sm"
+              >
+                <option value="">No parent (top-level category)</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+              
+            {/* Back to selection button */}
+            <div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCreatingCategory(false);
+                  setSelectedParentCategory('');
+                }}
+                className="text-xs text-gray-400 hover:text-primary-400"
+              >
+                ← Back to category selection
+              </button>
+            </div>
+          </div>
+        )}
 
-        {/* Action buttons */}
-        <div className="mt-6 flex justify-end space-x-3">
+        {/* Form Actions */}
+        <div className="flex justify-end space-x-2 pt-4">
           <button
             type="button"
             onClick={handleClose}
-            className="px-4 py-2 border border-dark-500 rounded-md shadow-sm bg-dark-600 text-white hover:bg-dark-500"
+            className="px-4 py-2 bg-dark-500 hover:bg-dark-400 rounded-md text-sm"
           >
             Cancel
           </button>
           <button
-            type="submit"
-            onClick={(e) => {
-              console.log('🖱️ Create button clicked');
-              
-              // If the regular form submission doesn't work, try this backup
-              if (formik.isValid || isCreatingCategory) {
-                e.preventDefault();
-                handleManualSubmit();
-              }
-            }}
-            className="px-4 py-2 border border-transparent rounded-md shadow-sm bg-primary-600 text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 flex items-center"
-            disabled={formik.isSubmitting}
+            type="button"
+            onClick={handleManualSubmit}
+            className="px-4 py-2 bg-primary-600 hover:bg-primary-700 rounded-md text-sm"
           >
-            {formik.isSubmitting ? (
-              <>
-                <span className="animate-spin mr-2">↻</span>
-                <span>Creating...</span>
-              </>
-            ) : (
-              <>
-                <PlusIcon className="h-4 w-4 mr-1" />
-                <span>Create Prompt</span>
-              </>
-            )}
+            Create Prompt
           </button>
         </div>
       </form>

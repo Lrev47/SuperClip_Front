@@ -158,10 +158,18 @@ export const fetchPromptById = createAsyncThunk(
       
       // Handle nested response structure
       let prompt;
-      if (response.data && response.data.data) {
-        // API returns { status: 'success', data: {...prompt} }
+      if (response.data && response.data.data && response.data.data.prompt) {
+        // API returns { status: 'success', data: { prompt: {...} } }
+        prompt = response.data.data.prompt;
+        console.log('🔍 Found prompt in nested data.prompt structure');
+      } else if (response.data && response.data.data) {
+        // Response has the expected nested structure { data: {...prompt} }
         prompt = response.data.data;
         console.log('🔍 Found prompt in nested data structure');
+      } else if (response.data && response.data.prompt) {
+        // Response has format { prompt: {...} }
+        prompt = response.data.prompt;
+        console.log('🔍 Found prompt in direct prompt property');
       } else {
         // Direct response format
         prompt = response.data;
@@ -184,15 +192,37 @@ export const createPrompt = createAsyncThunk(
       // Log the data being sent
       console.log('🔍 Creating prompt with data:', JSON.stringify(promptData, null, 2));
       
-      // Check for required fields
-      if (!promptData.title?.trim() || !promptData.content?.trim() || !promptData.categoryId) {
-        console.error('❌ Missing required fields in thunk:', {
-          title: Boolean(promptData.title?.trim()),
-          content: Boolean(promptData.content?.trim()),
-          categoryId: Boolean(promptData.categoryId),
+      // Check for required fields with more explicit validation
+      const missingFields = {
+        title: !promptData.title?.trim(),
+        content: !promptData.content?.trim(),
+        categoryId: !promptData.categoryId
+      };
+      
+      if (missingFields.title || missingFields.content || missingFields.categoryId) {
+        console.error('❌ Missing required fields in createPrompt thunk:', {
+          title: !missingFields.title,
+          content: !missingFields.content,
+          categoryId: !missingFields.categoryId,
+          rawCategoryId: promptData.categoryId
         });
-        throw new Error('Title, content, and categoryId are required');
+        
+        const missingFieldNames = Object.entries(missingFields)
+          .filter(([_, isMissing]) => isMissing)
+          .map(([fieldName, _]) => fieldName)
+          .join(', ');
+          
+        throw new Error(`Missing required fields for prompt: ${missingFieldNames}`);
       }
+      
+      // Enhanced logging for the categoryId
+      console.log('🔍 CategoryId type check:', {
+        categoryId: promptData.categoryId,
+        type: typeof promptData.categoryId,
+        isEmptyString: promptData.categoryId === '',
+        isNull: promptData.categoryId === null,
+        isUndefined: promptData.categoryId === undefined
+      });
       
       // Format the data properly to ensure consistency
       const formattedData = {
@@ -203,9 +233,13 @@ export const createPrompt = createAsyncThunk(
         tags: promptData.tags || []
       };
       
-      console.log('🔍 Sending formatted prompt data:', formattedData);
+      console.log('🔍 Sending formatted prompt data to API:', formattedData);
       
+      // Send the request
       const response = await api.post('/prompts', formattedData);
+      
+      // Log the response
+      console.log('🔍 Prompt creation API response:', response.data);
       
       // Handle nested response structure
       let newPrompt;

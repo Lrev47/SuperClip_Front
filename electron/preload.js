@@ -22,6 +22,12 @@ contextBridge.exposeInMainWorld('electron', {
   windowControl: (action) => ipcRenderer.send('window-control', action),
   isWindowMaximized: () => ipcRenderer.invoke('is-window-maximized'),
   isFullScreen: () => ipcRenderer.invoke('is-full-screen'),
+  titleBarDoubleClick: () => ipcRenderer.send('title-bar-double-click'),
+  
+  // Window snapping - direct methods
+  snapWindowLeft: () => ipcRenderer.invoke('snap-window-left'),
+  snapWindowRight: () => ipcRenderer.invoke('snap-window-right'),
+  snapWindowMaximize: () => ipcRenderer.invoke('snap-window-maximize'),
   
   // Event listeners
   onMaximizeChange: (callback) => {

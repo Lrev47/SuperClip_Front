@@ -56,6 +56,34 @@ export const setAuthenticating = (value: boolean) => {
 // Request interceptor for adding auth token
 api.interceptors.request.use(
   async (config) => {
+    // Log the request URL for tracking
+    console.log(`🔍 Request interceptor for URL: ${config.url}`);
+    
+    // Enhanced logging for prompt creation
+    if (config.method === 'post' && config.url === '/prompts') {
+      console.log('🔍 POST /prompts request data:', JSON.stringify(config.data, null, 2));
+      
+      // Add extra validation check for categoryId
+      if (config.data && typeof config.data === 'object') {
+        const { categoryId } = config.data;
+        console.log('🔍 CategoryId validation check:', {
+          value: categoryId,
+          type: typeof categoryId,
+          exists: !!categoryId
+        });
+        
+        // Make sure categoryId is a non-empty string
+        if (!categoryId || typeof categoryId !== 'string' || !categoryId.trim()) {
+          console.error('❌ Invalid categoryId in request:', categoryId);
+        }
+      }
+    }
+    
+    // Regular request data logging
+    else if (config.method === 'post' || config.method === 'put') {
+      console.log(`📤 Request data for ${config.url}:`, JSON.stringify(config.data, null, 2));
+    }
+    
     try {
       console.log('🔍 Request interceptor for URL:', config.url);
       
@@ -119,82 +147,65 @@ api.interceptors.request.use(
   }
 );
 
-// Response interceptor for handling errors
+// Response interceptor for error handling
 api.interceptors.response.use(
-  (response: AxiosResponse) => {
-    // If this is a login or register response, set authenticating flag
-    const isAuthResponse = 
-      response.config.url?.includes('/auth/login') || 
-      response.config.url?.includes('/auth/register');
-    
-    if (isAuthResponse) {
-      setAuthenticating(false);
-      
-      // Check for token in response and log it
-      if (response.data) {
-        console.log('🔍 Auth response data keys:', Object.keys(response.data));
-        
-        // Check possible token locations
-        const possibleTokenKeys = ['token', 'accessToken', 'access_token', 'auth_token', 'jwt', 'authToken'];
-        for (const key of possibleTokenKeys) {
-          if (response.data[key]) {
-            console.log(`🔑 Found token in response.data.${key}:`, response.data[key].substring(0, 15) + '...');
-            break;
-          }
-        }
-        
-        // Check if there's a property that looks like a JWT
-        const jwtPattern = /^ey[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}$/;
-        const jwtProps = Object.entries(response.data)
-          .filter(([_, value]) => typeof value === 'string' && jwtPattern.test(value as string));
-          
-        if (jwtProps.length > 0) {
-          console.log('🔍 Found properties that look like JWTs:', 
-            jwtProps.map(([key]) => key).join(', '));
-        }
-      }
-    }
-    
-    console.log('✅ API response success:', response.config.url);
+  (response) => {
+    // Log successful responses
+    console.log(`✅ API response success: ${response.config.url}`);
     return response;
   },
   async (error: AxiosError) => {
-    console.error('❌ API response error:', 
-                 error.config?.url, 
-                 error.response?.status, 
-                 error.message);
-    
-    const originalRequest = error.config as AxiosRequestConfig & { _retry?: boolean };
-    
-    // Don't handle 401s if we're in the login process to prevent loops
-    const isAuthEndpoint = 
-      originalRequest.url?.includes('/auth/login') || 
-      originalRequest.url?.includes('/auth/register');
-    
-    // Handle 401 Unauthorized errors
-    if (error.response?.status === 401 && !originalRequest._retry && !isAuthenticating && !isAuthEndpoint) {
-      originalRequest._retry = true;
+    if (error.response) {
+      console.error(`❌ API response error: ${error.config?.url} ${error.response.status} ${error.message}`);
       
-      try {
-        console.log('🔄 Handling 401 error, clearing token and redirecting');
-        // Clear token based on environment
-        if (isElectron()) {
-          await window.electron.clearAuthToken();
-        } else {
-          localStorage.removeItem('auth_token');
-        }
+      // Handle 401 Unauthorized errors
+      if (error.response.status === 401 && !isAuthenticating) {
+        console.log('🔒 Unauthorized response, clearing auth state');
         
-        // Only redirect to login if we're not already on the login page
-        const currentPath = window.location.pathname;
-        if (!currentPath.includes('/login') && !currentPath.includes('/register')) {
-          console.log('🔄 Redirecting to login page from:', currentPath);
-          window.location.href = '/login';
+        // Import the token clearing function dynamically
+        try {
+          // Clear token directly using localStorage and electron API
+          localStorage.removeItem('auth_token');
+          console.log('🔒 Cleared token from localStorage');
+          
+          if (isElectron()) {
+            try {
+              await window.electron.clearAuthToken();
+              console.log('🔒 Cleared token from Electron');
+            } catch (e) {
+              console.error('❌ Error clearing electron token:', e);
+            }
+          }
+          
+          // Only redirect if we're in a browser, not during SSR/tests
+          if (typeof window !== 'undefined') {
+            console.log('🔒 Redirecting to login page');
+            
+            if (isElectron()) {
+              try {
+                // Use Electron's IPC to navigate
+                window.electron.onNavigate((path: string) => {
+                  console.log(`🔍 Navigating to: ${path}`);
+                });
+                // Manually change location
+                window.location.href = '/login';
+              } catch (e) {
+                console.error('❌ Error navigating via Electron:', e);
+                // Fallback to manual navigation
+                window.location.href = '/login';
+              }
+            } else {
+              window.location.href = '/login';
+            }
+          }
+        } catch (err) {
+          console.error('❌ Error handling 401 unauthorized:', err);
         }
-      } catch (e) {
-        console.error('❌ Error handling 401 response:', e);
       }
-      
-      return Promise.reject(error);
+    } else if (error.request) {
+      console.error(`❌ API request error (no response): ${error.config?.url} ${error.message}`);
+    } else {
+      console.error(`❌ API error: ${error.message}`);
     }
     
     return Promise.reject(error);

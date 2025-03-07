@@ -9,6 +9,13 @@ interface ElectronAPI {
   windowControl: (action: 'minimize' | 'maximize' | 'close') => void;
   isWindowMaximized: () => Promise<boolean>;
   isFullScreen: () => Promise<boolean>;
+  titleBarDoubleClick: () => void;
+  
+  // Window snapping - direct methods
+  snapWindowLeft: () => Promise<boolean>;
+  snapWindowRight: () => Promise<boolean>;
+  snapWindowMaximize: () => Promise<boolean>;
+  
   onMaximizeChange: (callback: (event: any, maximized: boolean) => void) => void;
   onFullScreenChange: (callback: (event: any, isFullScreen: boolean) => void) => void;
   onNavigate: (callback: (path: string) => void) => void;

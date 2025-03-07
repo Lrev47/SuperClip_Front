@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { XMarkIcon, MinusIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, MinusIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon, ArrowLeftIcon, ArrowRightIcon } from '@heroicons/react/24/outline';
 import SuperClipLogo from '../../assets/super-clip-logo.svg';
 import './TitleBar.css'; // We'll create this CSS file next
 
@@ -72,7 +72,25 @@ const TitleBar = () => {
 
   // Double-click handler for maximizing/restoring window
   const handleDoubleClick = () => {
-    handleMaximize();
+    if (window.electron?.titleBarDoubleClick) {
+      window.electron.titleBarDoubleClick();
+    } else {
+      // Fallback to the old method if the new one isn't available
+      handleMaximize();
+    }
+  };
+
+  // Add handlers for window snapping
+  const handleSnapLeft = () => {
+    if (window.electron?.snapWindowLeft) {
+      window.electron.snapWindowLeft();
+    }
+  };
+
+  const handleSnapRight = () => {
+    if (window.electron?.snapWindowRight) {
+      window.electron.snapWindowRight();
+    }
   };
 
   // If in fullscreen mode, hide the title bar or make it more transparent
@@ -102,6 +120,20 @@ const TitleBar = () => {
         <span className="text-xs font-medium text-gray-300">SuperClip</span>
       </div>
       <div className="title-bar-buttons">
+        <button
+          onClick={handleSnapLeft}
+          className="title-bar-button snap-button"
+          title="Snap to left side"
+        >
+          <ArrowLeftIcon className="h-4 w-4 text-gray-400" />
+        </button>
+        <button
+          onClick={handleSnapRight}
+          className="title-bar-button snap-button"
+          title="Snap to right side"
+        >
+          <ArrowRightIcon className="h-4 w-4 text-gray-400" />
+        </button>
         <button
           onClick={handleMinimize}
           className="title-bar-button"

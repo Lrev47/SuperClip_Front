@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '@/hooks/redux';
 import { logout } from '@/store/slices/authSlice';
 import { setCurrentCategory } from '@/store/slices/uiSlice';
@@ -25,6 +25,7 @@ interface SidebarProps {
 const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
   const dispatch = useAppDispatch();
   const location = useLocation();
+  const navigate = useNavigate();
   const { categories } = useAppSelector((state) => state.categories);
   const { currentCategoryId } = useAppSelector((state) => state.ui);
   const { user } = useAppSelector((state) => state.auth);
@@ -35,23 +36,22 @@ const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
 
   const handleCategoryClick = (categoryId: string) => {
     dispatch(setCurrentCategory(categoryId));
+    navigate(`/categories/${categoryId}`);
   };
 
   // Organize categories into a tree structure
   const organizeCategories = (categories: Category[]) => {
-    const rootCategories = categories.filter((cat) => !cat.parentId);
-    const childCategories = categories.filter((cat) => cat.parentId);
-
-    return rootCategories.map((rootCat) => {
-      const children = childCategories.filter((child) => child.parentId === rootCat.id);
-      return {
-        ...rootCat,
-        children,
-      };
-    });
+    // Filter for top-level categories (those with null or empty string parentId)
+    const topLevelCategories = categories.filter((cat) => 
+      cat.parentId === null || cat.parentId === undefined || cat.parentId === '');
+    
+    console.log('🔍 All categories:', categories.map(c => ({id: c.id, name: c.name, parentId: c.parentId})));
+    console.log('🔍 Filtered top-level categories:', topLevelCategories.map(c => c.name));
+    
+    return topLevelCategories;
   };
 
-  const organizedCategories = organizeCategories(categories);
+  const topLevelCategories = organizeCategories(categories);
 
   return (
     <div
@@ -129,15 +129,17 @@ const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
               </NavLink>
             </div>
             <div className="space-y-1">
-              {organizedCategories.map((category) => (
+              {topLevelCategories.map((category) => (
                 <div key={category.id}>
-                  <button
-                    onClick={() => handleCategoryClick(category.id)}
-                    className={`sidebar-item w-full text-left block ${
-                      currentCategoryId === category.id
-                        ? 'sidebar-item-active'
-                        : 'sidebar-item-inactive'
-                    }`}
+                  <NavLink
+                    to={`/categories/${category.id}`}
+                    className={({ isActive }) =>
+                      `sidebar-item w-full text-left block ${
+                        isActive 
+                          ? 'sidebar-item-active'
+                          : 'sidebar-item-inactive'
+                      }`
+                    }
                   >
                     <div className="flex items-center">
                       <FolderIcon
@@ -146,31 +148,7 @@ const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
                       />
                       <span className="truncate">{category.name}</span>
                     </div>
-                  </button>
-                  {/* Render children if any */}
-                  {category.children && category.children.length > 0 && (
-                    <div className="ml-6 space-y-1 mt-1">
-                      {category.children.map((child) => (
-                        <button
-                          key={child.id}
-                          onClick={() => handleCategoryClick(child.id)}
-                          className={`sidebar-item w-full text-left block ${
-                            currentCategoryId === child.id
-                              ? 'sidebar-item-active'
-                              : 'sidebar-item-inactive'
-                          }`}
-                        >
-                          <div className="flex items-center">
-                            <FolderIcon
-                              className="h-4 w-4 mr-3"
-                              style={{ color: child.color || '#9ca3af' }}
-                            />
-                            <span className="truncate">{child.name}</span>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                  </NavLink>
                 </div>
               ))}
             </div>
