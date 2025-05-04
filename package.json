@@ -1,20 +1,14 @@
 {
   "name": "superclipfront",
   "version": "1.0.0",
-  "description": "Electron application for managing AI prompts and command snippets",
-  "main": "electron/main.js",
+  "description": "Web application for managing AI prompts and command snippets",
   "scripts": {
-    "start": "concurrently \"npm run start:react\" \"npm run start:electron\"",
-    "start:react": "vite",
-    "start:electron": "wait-on tcp:3001 && electron .",
+    "start": "vite",
     "build": "vite build",
-    "package": "electron-builder build --win --mac --linux",
-    "test": "jest",
-    "dev": "concurrently \"cross-env BROWSER=none npm run start:react\" \"wait-on tcp:3001 && electron .\"",
-    "reload": "if exist dist (rmdir /s /q dist) && npm run build && npm run start:electron"
+    "preview": "vite preview",
+    "test": "jest"
   },
   "keywords": [
-    "electron",
     "react",
     "ai",
     "prompt",
@@ -27,8 +21,6 @@
     "@heroicons/react": "^2.0.18",
     "@reduxjs/toolkit": "^1.9.5",
     "axios": "^1.5.0",
-    "electron-is-dev": "^2.0.0",
-    "electron-store": "^8.1.0",
     "formik": "^2.4.3",
     "framer-motion": "^10.16.2",
     "jwt-decode": "^3.1.2",
@@ -51,42 +43,10 @@
     "@types/react-dom": "^18.2.7",
     "@vitejs/plugin-react": "^4.0.4",
     "autoprefixer": "^10.4.15",
-    "concurrently": "^8.2.1",
-    "cross-env": "^7.0.3",
-    "electron": "^26.1.0",
-    "electron-builder": "^24.6.3",
     "jest": "^29.6.4",
     "postcss": "^8.4.28",
     "tailwindcss": "^3.3.3",
     "typescript": "^5.2.2",
-    "vite": "^4.4.9",
-    "wait-on": "^7.0.1"
-  },
-  "build": {
-    "appId": "com.superclip.app",
-    "productName": "SuperClip",
-    "files": [
-      "dist/**/*",
-      "electron/**/*"
-    ],
-    "directories": {
-      "buildResources": "assets",
-      "output": "release"
-    },
-    "mac": {
-      "category": "public.app-category.productivity"
-    },
-    "win": {
-      "target": [
-        "nsis"
-      ]
-    },
-    "linux": {
-      "target": [
-        "AppImage",
-        "deb"
-      ],
-      "category": "Utility"
-    }
+    "vite": "^4.4.9"
   }
 }

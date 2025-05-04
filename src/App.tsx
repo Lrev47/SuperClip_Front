@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from './hooks/redux';
 import { checkAuth } from './store/slices/authSlice';
 
@@ -21,7 +21,6 @@ import NotFoundPage from './pages/NotFoundPage';
 // Components
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import TitleBar from './components/ui/TitleBar';
-import { isElectron } from './utils/environment';
 
 // Modals
 import CreatePromptModal from './components/prompts/CreatePromptModal';
@@ -29,7 +28,6 @@ import CreatePromptModal from './components/prompts/CreatePromptModal';
 const App = () => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
-  const location = useLocation();
   const { isAuthenticated, loading, user } = useAppSelector((state) => state.auth);
   const [authChecked, setAuthChecked] = useState(false);
 
@@ -38,18 +36,9 @@ const App = () => {
     console.log('🔒 Initial auth check');
     const checkAuthentication = async () => {
       try {
-        // Try to get the token directly first, for debugging
-        if (isElectron()) {
-          try {
-            const directToken = await window.electron.getAuthToken();
-            console.log('🔑 Direct Electron token check:', directToken ? 'Token exists' : 'No token');
-          } catch (e) {
-            console.error('❌ Error in direct token check:', e);
-          }
-        } else {
-          const localToken = localStorage.getItem('auth_token');
-          console.log('🔑 Direct localStorage token check:', localToken ? 'Token exists' : 'No token');
-        }
+        // Check localStorage for token
+        const localToken = localStorage.getItem('auth_token');
+        console.log('🔑 Token check:', localToken ? 'Token exists' : 'No token');
         
         // Proceed with normal auth check via Redux
         await dispatch(checkAuth());
@@ -61,21 +50,6 @@ const App = () => {
     };
     checkAuthentication();
   }, [dispatch]);
-
-  // Setup electron navigation listeners
-  useEffect(() => {
-    // Only set up if we're in electron
-    if (isElectron()) {
-      console.log('🪟 Setting up Electron navigation handler');
-      try {
-        window.electron.onNavigate((path: string) => {
-          navigate(path);
-        });
-      } catch (error) {
-        console.error('❌ Error setting up electron navigation:', error);
-      }
-    }
-  }, [navigate]);
 
   // Log authentication state changes
   useEffect(() => {
